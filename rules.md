@@ -40,6 +40,7 @@
 
 1. **Layering** (LLD §1.4), enforced by ESLint `import-x/no-restricted-paths`:
    `shared` ← `domain` ← `application` ← `infrastructure` ← `main.ts`. A layer MUST NOT import from a layer to its right.
+   Exception: application **tests** (and `application/test/**` harness code) may import infrastructure adapters, because a test is a composition root. Production application code never may.
 2. **Domain purity.** `apps/server/src/domain/**` MUST NOT:
    - perform I/O
    - read `Date.now()` or `new Date()`

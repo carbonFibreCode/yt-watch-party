@@ -160,6 +160,17 @@ export default defineConfig(
     },
   },
 
+  // ---------- tests are composition roots: application tests may wire infrastructure adapters ----------
+  {
+    files: ['apps/server/src/application/**/*.test.ts', 'apps/server/src/application/test/**/*.ts'],
+    rules: {
+      'import-x/no-restricted-paths': [
+        'error',
+        { zones: LAYER_ZONES.filter((zone) => zone.target !== `${SERVER}/application`) },
+      ],
+    },
+  },
+
   // ---------- tool configs require default exports ----------
   {
     files: ['**/*.config.{ts,js}', 'eslint.config.js'],

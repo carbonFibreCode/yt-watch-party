@@ -82,6 +82,7 @@
 | **Decorator** | `TieredRoomRepository(hot, cold)` | Read-through and write-behind added without touching `RedisRoomRepository` |
 | **Strategy** | Repository / rate-limiter / Socket.IO adapter chosen by config (Redis or memory) | Single-instance dev and multi-instance prod run the same code |
 | **Adapter (Ports & Adapters)** | `YouTubePlayerAdapter`, `BetterAuthSessionResolver`, `OEmbedMetadataProvider` | Third-party APIs never leak into domain or React components |
+| **Template Method** | `RoomCommand` → `SimpleRoomCommand` / `PlaybackCommand` | One fixed prepare → re-authorize → execute → publish skeleton; subclasses only fill in their steps |
 | **Unit of Work** | `RoomService.mutate(id, fn)` | Load → mutate → CAS save → emit, with retry, in one place |
 | **Factory** | `Room.create()`, `createSocket()`, `buildContainer()` | Correct construction stays centralized |
 | **Presenter** | `RoomPresenter` | Domain snapshot → public view (hides bans and internal fields) |
@@ -288,7 +289,7 @@ export const ReactionEmoji  = z.enum(REACTION_SET);              // from constan
 ```ts
 // contract/client-events.ts: THE single list of client intents
 export const ClientEventSchemas = {
-  join_room:          z.object({ roomId: RoomCode, displayName: DisplayName.optional() }),
+  join_room:          z.object({ roomId: RoomCode }),                 // name always comes from the session
   leave_room:         z.object({ roomId: RoomCode }),
   play:               z.object({}),
   pause:              z.object({}),
@@ -364,7 +365,7 @@ Brief-mandated event names are kept **verbatim**. `change_video` takes a `url` i
    - No session → `next(new Error('UNAUTHENTICATED'))`.
    - Otherwise sets `socket.data.user`.
    - better-auth's `session.cookieCache` (5 min) avoids a DB round-trip per handshake.
-4. **Display name trust.** The server always takes the name from the session, never from payloads. `join_room.displayName`, if present, updates the session user's name first (via `auth.api.updateUser`) and then the room.
+4. **Display name trust.** The server always takes the name from the session, never from payloads. To change their name, the client calls better-auth's `updateUser({ name })` and then (re)joins; `join()` updates the member's name from the session.
 5. **Authorization identity** is `socket.data.user.id`, everywhere.
 
 **SOLID:** auth is a port (DIP). Tests use `StaticSessionResolver` (reads an `x-test-user` header), which keeps integration tests fast and deterministic.
@@ -650,47 +651,71 @@ Chat is **not** part of the Room aggregate. It doesn't need to be consistent wit
 **What.**
 
 ```ts
-interface CommandHandler<E extends ClientEventName, P = unknown> {
+interface CommandPolicy {                        // declarative; enforced by the pipeline
+  readonly capability: Capability | null;        // null = any member (or anyone, if membership isn't required)
+  readonly requiresMembership: boolean;          // false only for join_room and timesync
+  readonly rateRule: RateRule;                   // key into shared RATE_LIMITS
+}
+
+interface CommandHandler<E extends ClientEventName> extends CommandPolicy {
   readonly event: E;
-  readonly capability: Capability | null;       // null = any member (chat has its own cap; join needs none)
-  readonly requiresMembership: boolean;         // false only for join_room
-  readonly requestable: boolean;                // participant may submit via request_action
-  /** Optional async I/O phase OUTSIDE the room lock (e.g. oEmbed lookup). Result passed to execute. */
-  prepare?(payload: ClientPayload<E>, ctx: CommandContext): Promise<P>;
-  /** Pure mutation inside RoomService.mutate. Returns ack data. */
-  execute(room: Room, actor: Participant | null, input: { payload: ClientPayload<E>; prepared: P }, ctx: CommandContext): AckData[E];
+  readonly schema: z.ZodType<ClientPayload<E>>;  // must be ClientEventSchemas[event] (registry test)
+  handle(payload: ClientPayload<E>, ctx: CommandContext): Promise<AckData[E]>;
 }
 
-interface CommandContext {                       // ISP: only what handlers need
-  readonly user: AuthUser; readonly roomId: RoomCode | null;
-  readonly now: number; readonly ids: IdGenerator;
-  readonly video: VideoMetadataProvider;
+interface CommandContext {                       // ISP: dependencies arrive via constructors, not the context
+  readonly session: RealtimeSession;             // user, roomId, attach/detach
+  readonly user: AuthUser;
+  readonly actor: Participant | null;            // resolved by the membership step
 }
 ```
 
-`CommandRegistry` maps `event → handler`, built in `main.ts` from an array of handler instances. `CommandPipeline` composes the middleware once:
+**Template Method for room mutations.** `RoomCommand<E, P>` implements `handle` once:
 
 ```
-socket.on(event, payload, ack)
-  └─► validate(schema)          → VALIDATION_FAILED
-  └─► rateLimit(event, userId)  → RATE_LIMITED
-  └─► resolveMembership         → NOT_IN_ROOM            (reads socket.data.roomId)
-  └─► authorize(capability)     → FORBIDDEN              (PermissionPolicy.can, using role from a fresh room read)
-  └─► handler.prepare?          (I/O, outside lock)      → INVALID_VIDEO, …
-  └─► RoomService.mutate(handler.execute)                → domain errors, CONFLICT
-  └─► Broadcaster.publish(roomId, events)                (SP-8)
+prepare(payload) → P            (I/O outside the room lock, e.g. oEmbed)
+RoomService.mutate(room, now) {
+  actor = authorizeIn(room, user, capability)   ← re-check against the FRESH state
+  return execute(room, { actor, input: P, now }) ← pure; may re-run on CAS retry
+}
+Broadcaster.publish(room, events)
+```
+
+- `SimpleRoomCommand<E>` is a `RoomCommand` whose input is its payload (no prepare).
+- `PlaybackCommand<E extends RequestableActionType>` maps the payload to a `RequestableAction` and delegates to `RequestedActions.prepare/apply` (SP-10).
+
+`CommandRegistry.register(handler)` binds each handler to the pipeline **while its event type is still static**, storing a closure. Dispatch by runtime event name therefore needs no casts and no `switch`. Unknown events are acked `VALIDATION_FAILED`. `assertComplete()` fails boot if any contract event lacks a handler. `registerAllHandlers(registry, deps)` is the single handler list, shared by `main.ts` and the test harness.
+
+`CommandPipeline.run` is a fixed sequence of single-purpose steps (`commands/middleware/*`):
+
+```
+registry.dispatch(event, raw, session)
+  └─► validatePayload(handler.schema)        → VALIDATION_FAILED   (before rate limiting: malformed spam can't drain buckets)
+  └─► enforceRateLimit(handler.rateRule)     → RATE_LIMITED
+  └─► resolveMembership                      → NOT_IN_ROOM         (session.roomId + read room + still a member)
+  └─► authorize(handler.capability, actor)   → FORBIDDEN           (fail fast before any prepare I/O)
+  └─► handler.handle(payload, ctx)           → domain errors, INVALID_VIDEO, CONFLICT, …
   └─► ack({ ok: true, data })
-  any throw → ack({ ok: false, error: toAckError(e) })   (DomainError → its code; unknown → INTERNAL + log)
+  any throw → DomainError → ack(code) [warn for FORBIDDEN/RATE_LIMITED/BANNED]; anything else → INTERNAL + error log
 ```
 
-`authorize` reads the actor's role from the room snapshot. That read is not inside the CAS, so `execute` **re-checks the capability** with `PermissionPolicy.can` against the role in the freshly loaded room. The check comes from the same function, so it isn't duplicated. This closes the race where the user was demoted between the two reads.
+The dispatch-time `authorize` reads the role outside the transaction, so `RoomCommand` **re-checks inside `mutate`** using the same `authorizeIn` function. This closes the "demoted between dispatch and commit" race. A test reproduces the race deterministically (the demotion happens during the oEmbed prepare phase), and mutation-testing confirms the test fails if the re-check is removed.
 
-**Handlers** (one class each, ~10–25 lines):
-`JoinRoom`, `LeaveRoom`, `Play`, `Pause`, `Seek`, `ChangeVideo` (prepare: parse + oEmbed), `AssignRole`, `RemoveParticipant`, `TransferHost`, `QueueAdd` (prepare: same as ChangeVideo), `QueueRemove`, `RequestAction`, `ResolveRequest`, `ReportDuration`, `VideoEnded`.
+**Handlers** (one class each, 10–25 lines):
 
-Chat, reactions, and timesync **don't mutate the room**, so they're registered as `SideChannelHandler`s. They run through the same `validate → rateLimit → resolveMembership → authorize` middleware, then call `ChatService` or an emit instead of `RoomService.mutate`. The pipeline is reused and only the terminal step differs.
+| Kind | Handlers |
+|---|---|
+| `PlaybackCommand` (requestable) | `Play`, `Pause`, `Seek`, `ChangeVideo`, `QueueAdd` |
+| `SimpleRoomCommand` | `QueueRemove`, `AssignRole`, `RemoveParticipant`, `TransferHost`, `ResolveRequest`, `ReportDuration`, `VideoEnded` |
+| `RoomCommand` with prepare | `RequestAction` |
+| Membership (via `MembershipService`) | `JoinRoom`, `LeaveRoom` |
+| Side channels (no room mutation) | `ChatMessage` (`ChatService`), `Reaction` (`Broadcaster.toRoom`), `Timesync` |
 
-`JoinRoom` additionally performs socket-level effects through the `RealtimeSession` port: `socket.data.roomId = id`, joining channels (SP-8), and returning the full `RoomView` + `chatHistory` in the ack. A socket can be in one room at a time. Joining another room leaves the previous one first.
+**`MembershipService`** owns join/leave and is shared by the join/leave commands and the presence lifecycle (SP-9):
+- **join:** leave the previous room if needed → `mutate(join)` → `session.attach(roomId, role)` → record the membership → publish → ack `{ RoomView, chatHistory }`.
+- **leave:** `session.detach()` → if `PresenceProbe` still counts other sockets of this user in the room, stop (another tab is open) → otherwise `mutate(leave)` → publish.
+
+**Persistence boundary.** Every `RoomRepository` (de)serializes through `RoomSnapshotCodec`, a zod schema typed as `z.ZodType<RoomSnapshot>`. It can't drift from the domain type, and corrupt stored data fails loudly instead of loading a broken aggregate.
 
 ---
 
@@ -790,12 +815,12 @@ type RequestedAction =
 
 **How.**
 1. `request_action` (capability `request.create`):
-   - `prepare` delegates to the **target handler's** `prepare`, which returns that action's `RequestedAction` branch. For `change_video`, the URL is parsed and checked for embeddability *now*, so the requester gets immediate feedback.
-   - Every requestable handler's `prepare` returns its `RequestedAction` branch, and its `execute` consumes only that prepared value. That makes "execute directly" and "execute after approval" literally the same call.
+   - `prepare` calls `RequestedActions.prepare(action)`, which returns that action's `RequestedAction` branch. For `change_video`, the URL is parsed and checked for embeddability *now*, so the requester gets immediate feedback.
+   - **One implementation per action:** `RequestedActions.prepare(action)` (I/O) and `RequestedActions.apply(room, action, actor, now)` (pure, exhaustive `switch`). The direct `PlaybackCommand`s and the approval path both call these, so "execute directly" and "execute after approval" are literally the same code. This replaced an earlier registry-lookup design that would have needed type casts.
    - `execute` → `room.createRequest(...)` → `RequestCreated` → staff see an `action_requested` toast with Approve/Reject and a countdown.
 2. `resolve_request` (capability `request.resolve`), inside a single `mutate`:
    - `room.resolveRequest(actor, id, approve, now)` validates that the request is pending and not expired (`REQUEST_EXPIRED`).
-   - If approved, `registry.get(req.action.type).execute(room, approverAsActor, { prepared: req.action }, ctx)` runs. This is **the exact same handler** a moderator triggers directly, and permission is evaluated against the approver.
+   - If approved, `RequestedActions.apply(room, request.action, approver, now)` runs. This is **the exact same code** a moderator triggers directly, and `playback.control` is checked against the approver.
    - Both changes commit atomically in one CAS.
    - Events: `RequestResolved` (requester gets a "approved by Alex" / "rejected" toast) and e.g. `PlaybackChanged`.
 3. **Expiry.** `expiresAt = now + REQUEST_TTL_MS`.
@@ -980,7 +1005,7 @@ class SyncEngine {
 | `join` | join_room | 10 / 60s per user |
 | HTTP `createRoom` | POST /api/rooms | 10 / hour per user (express middleware via same adapter) |
 
-The rule is declared on each handler (`readonly rateRule`), so the middleware stays generic.
+The table lives in `shared/constants.ts` as `RATE_LIMITS` (one source for the numbers). The rule is declared on each handler (`readonly rateRule`), so the middleware stays generic.
 
 **Other controls:**
 - Socket.IO `maxHttpBufferSize: 16 KB`.

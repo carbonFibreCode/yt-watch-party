@@ -14,6 +14,7 @@ export default defineConfig({
       thresholds: {
         'packages/shared/src/{permissions,playback,youtube,errors}.ts': FULL,
         'apps/server/src/domain/**/*.ts': { lines: 95, functions: 95, branches: 90, statements: 95 },
+        'apps/server/src/application/**/*.ts': { lines: 85, functions: 85, branches: 80, statements: 85 },
       },
     },
   },

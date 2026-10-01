@@ -2,7 +2,6 @@ import { z } from 'zod';
 import {
   AssignableRole,
   ChatText,
-  DisplayName,
   EntityId,
   ReactionEmoji,
   Revision,
@@ -38,7 +37,8 @@ export type RequestableActionType = RequestableAction['type'];
 
 /** The single list of client → server intents (LLD SP-1). Brief-mandated names are kept verbatim. */
 export const ClientEventSchemas = {
-  join_room: z.strictObject({ roomId: RoomCode, displayName: DisplayName.optional() }),
+  /** The display name comes from the session, never from the payload (rules.md §11.1). */
+  join_room: z.strictObject({ roomId: RoomCode }),
   leave_room: z.strictObject({ roomId: RoomCode }),
   play,
   pause,
@@ -66,7 +66,8 @@ export const CLIENT_EVENT_NAMES = Object.keys(ClientEventSchemas) as readonly Cl
 
 // ---------- ack data per event ----------
 
-export type EmptyAck = Record<string, never>;
+export type EmptyAck = Readonly<Record<string, never>>;
+export const EMPTY_ACK: EmptyAck = Object.freeze({});
 
 export interface JoinRoomAck {
   readonly room: RoomView;

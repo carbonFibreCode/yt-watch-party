@@ -6,6 +6,7 @@
 // ---------- rooms ----------
 export const ROOM_CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
 export const ROOM_CODE_LENGTH = 6;
+export const ROOM_CODE_MAX_ATTEMPTS = 5;
 export const ROOM_CAPACITY = 100;
 export const ROOM_NAME_MAX_LEN = 64;
 export const DISPLAY_NAME_MAX_LEN = 32;
@@ -28,6 +29,19 @@ export const POST_SEEK_COOLDOWN_MS = 1_500;
 export const AUTOPLAY_DETECT_MS = 1_500;
 export const END_TOLERANCE_S = 3;
 export const CLOCK_SYNC_INTERVAL_MS = 60_000;
+
+// ---------- rate limits (LLD SP-17): token bucket per user per rule ----------
+export const RATE_LIMITS = {
+  playback: { points: 10, durationS: 5 },
+  requests: { points: 3, durationS: 10 },
+  moderation: { points: 20, durationS: 10 },
+  chat: { points: 5, durationS: 5 },
+  reaction: { points: 10, durationS: 5 },
+  telemetry: { points: 30, durationS: 10 },
+  join: { points: 10, durationS: 60 },
+  createRoom: { points: 10, durationS: 3600 },
+} as const;
+export type RateRule = keyof typeof RATE_LIMITS;
 
 // ---------- transport ----------
 export const ACK_TIMEOUT_MS = 5_000;
