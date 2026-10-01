@@ -275,11 +275,11 @@ watch-party/
 
 ```ts
 // contract/primitives.ts
-export const RoomCode    = z.string().regex(/^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{6}$/);
+export const RoomCode    = z.string().trim().toUpperCase().regex(/^[ROOM_CODE_ALPHABET]{ROOM_CODE_LENGTH}$/); // built from constants
 export const UserId      = z.string().min(1).max(64);
 export const DisplayName = z.string().trim().min(1).max(32);
 export const VideoUrl    = z.string().trim().min(1).max(500);   // parsed server-side to VideoId
-export const Seconds     = z.number().finite().min(0).max(60 * 60 * 24);
+export const Seconds     = z.number().min(0).max(MAX_MEDIA_SECONDS);   // zod 4 rejects Infinity/NaN by default
 export const Role        = z.enum(['host', 'moderator', 'participant', 'viewer']);
 export const AssignableRole = Role.exclude(['host']);            // host only via transfer_host
 export const ReactionEmoji  = z.enum(REACTION_SET);              // from constants
@@ -298,14 +298,14 @@ export const ClientEventSchemas = {
   remove_participant: z.object({ userId: UserId }),
   transfer_host:      z.object({ userId: UserId }),
   queue_add:          z.object({ url: VideoUrl }),
-  queue_remove:       z.object({ itemId: z.string().max(32) }),
+  queue_remove:       z.object({ itemId: EntityId }),
   request_action:     z.object({ action: RequestableAction }),    // see SP-10
-  resolve_request:    z.object({ requestId: z.string().max(32), approve: z.boolean() }),
+  resolve_request:    z.object({ requestId: EntityId, approve: z.boolean() }),
   chat_message:       z.object({ text: z.string().trim().min(1).max(CHAT_MAX_LEN) }),
   reaction:           z.object({ emoji: ReactionEmoji, videoTime: Seconds }),
   report_duration:    z.object({ videoId: VideoId, duration: Seconds.min(1) }),
   video_ended:        z.object({ videoId: VideoId, rev: z.number().int().nonnegative() }),
-  timesync:           z.object({ id: z.number(), method: z.literal('timesync') }).passthrough(),
+  timesync:           z.looseObject({ id: z.union([z.number(), z.string()]), method: z.literal('timesync') }),
 } as const;
 
 export type ClientEventName = keyof typeof ClientEventSchemas;
@@ -323,7 +323,7 @@ export type ClientToServerEvents = {
 export interface ServerToClientEvents {
   sync_state(p: PlaybackView): void;
   user_joined(p: { userId: string; username: string; role: Role; participants: ParticipantView[] }): void;
-  user_left(p: { userId: string; username: string; participants: ParticipantView[] }): void;
+  user_left(p: { userId: string; username: string; reason: 'left' | 'timeout'; participants: ParticipantView[] }): void;
   presence_changed(p: { userId: string; presence: 'online' | 'away'; participants: ParticipantView[] }): void;
   role_assigned(p: { userId: string; username: string; role: Role; participants: ParticipantView[] }): void;
   host_transferred(p: { fromUserId: string; toUserId: string; reason: 'manual' | 'succession'; participants: ParticipantView[] }): void;
@@ -769,11 +769,11 @@ Each presenter calls `RoomPresenter.participants(room)`, so the participants lis
 ```ts
 // shared/contract/client-events.ts
 export const RequestableAction = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('play') }).merge(ClientEventSchemas.play),
-  z.object({ type: z.literal('pause') }).merge(ClientEventSchemas.pause),
-  z.object({ type: z.literal('seek') }).merge(ClientEventSchemas.seek),
-  z.object({ type: z.literal('change_video') }).merge(ClientEventSchemas.change_video),
-  z.object({ type: z.literal('queue_add') }).merge(ClientEventSchemas.queue_add),
+  z.strictObject({ type: z.literal('play'), ...play.shape }),   // command payload shapes reused (zod 4: spread .shape)
+  z.strictObject({ type: z.literal('pause'), ...pause.shape }),
+  z.strictObject({ type: z.literal('seek'), ...seek.shape }),
+  z.strictObject({ type: z.literal('change_video'), ...changeVideo.shape }),
+  z.strictObject({ type: z.literal('queue_add'), ...queueAdd.shape }),
 ]);
 
 // domain
