@@ -3,6 +3,7 @@ export const ErrorCode = {
   UNAUTHENTICATED: 'UNAUTHENTICATED',
   VALIDATION_FAILED: 'VALIDATION_FAILED',
   ROOM_NOT_FOUND: 'ROOM_NOT_FOUND',
+  NOT_FOUND: 'NOT_FOUND',
   NOT_IN_ROOM: 'NOT_IN_ROOM',
   FORBIDDEN: 'FORBIDDEN',
   BANNED: 'BANNED',
@@ -25,6 +26,7 @@ export const ERROR_MESSAGES: Readonly<Record<ErrorCode, string>> = {
   UNAUTHENTICATED: 'Please enter a name to continue.',
   VALIDATION_FAILED: 'That request was malformed.',
   ROOM_NOT_FOUND: "This room doesn't exist.",
+  NOT_FOUND: 'Not found.',
   NOT_IN_ROOM: 'Join the room first.',
   FORBIDDEN: "You don't have permission to do that.",
   BANNED: 'You were removed from this room.',
@@ -52,10 +54,10 @@ export type AckResult<T> =
 
 export const ackOk = <T>(data: T): AckResult<T> => ({ ok: true, data });
 
-export const ackError = <T = never>(code: ErrorCode): AckResult<T> => ({
-  ok: false,
-  error: { code, message: ERROR_MESSAGES[code] },
-});
+/** The catalogue entry for a code; the one place codes become user-facing errors (socket and HTTP). */
+export const errorOf = (code: ErrorCode): AckError => ({ code, message: ERROR_MESSAGES[code] });
+
+export const ackError = <T = never>(code: ErrorCode): AckResult<T> => ({ ok: false, error: errorOf(code) });
 
 export const isErrorCode = (value: unknown): value is ErrorCode =>
   typeof value === 'string' && Object.hasOwn(ErrorCode, value);

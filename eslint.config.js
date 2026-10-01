@@ -15,18 +15,18 @@ const SERVER = './apps/server/src';
 const LAYER_ZONES = [
   {
     target: `${SERVER}/domain`,
-    from: [`${SERVER}/application`, `${SERVER}/infrastructure`, `${SERVER}/main.ts`],
+    from: [`${SERVER}/application`, `${SERVER}/infrastructure`, `${SERVER}/main.ts`, `${SERVER}/compose.ts`],
     message: 'domain/ is pure: it may only import from domain/ and @watchparty/shared.',
   },
   {
     target: `${SERVER}/application`,
-    from: [`${SERVER}/infrastructure`, `${SERVER}/main.ts`],
+    from: [`${SERVER}/infrastructure`, `${SERVER}/main.ts`, `${SERVER}/compose.ts`],
     message: 'application/ depends on ports, never on infrastructure/.',
   },
   {
     target: `${SERVER}/infrastructure`,
-    from: [`${SERVER}/main.ts`],
-    message: 'Only main.ts (composition root) wires infrastructure together.',
+    from: [`${SERVER}/main.ts`, `${SERVER}/compose.ts`],
+    message: 'Only the composition root (compose.ts, main.ts) wires infrastructure together.',
   },
   {
     target: './packages/shared',
@@ -76,6 +76,7 @@ export default defineConfig(
         },
       ],
       '@typescript-eslint/consistent-type-imports': 'error',
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/switch-exhaustiveness-check': 'error',
       '@typescript-eslint/explicit-module-boundary-types': 'error',

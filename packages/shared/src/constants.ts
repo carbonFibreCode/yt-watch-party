@@ -14,6 +14,8 @@ export const ID_MAX_LEN = 64;
 
 // ---------- presence & lifecycle ----------
 export const GRACE_PERIOD_MS = 15_000;
+/** Delay past the grace period before the reap check runs, so the deadline has surely passed. */
+export const GRACE_CHECK_SLACK_MS = 250;
 export const RECOVERY_WINDOW_MS = 120_000;
 
 // ---------- approval workflow ----------
@@ -61,3 +63,10 @@ export const REACTION_SET = ['👍', '😂', '😮', '❤️', '🔥', '👏', '
 // ---------- video ----------
 export const VIDEO_URL_MAX_LEN = 500;
 export const OEMBED_TIMEOUT_MS = 2_500;
+export const OEMBED_CACHE_MAX = 1_000;
+export const OEMBED_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+export const OEMBED_NEGATIVE_TTL_MS = 10 * 60 * 1000;
+export const VIDEO_FALLBACK_TITLE = 'YouTube video';
+
+// ---------- process ----------
+export const SHUTDOWN_TIMEOUT_MS = 10_000;

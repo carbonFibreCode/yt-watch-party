@@ -118,6 +118,12 @@ export interface Broadcaster {
   ): void;
 }
 
+/** Deferred work keyed for de-duplication: scheduling an existing key replaces its timer. */
+export interface Scheduler {
+  schedule(key: string, delayMs: number, task: () => Promise<void>): void;
+  cancelAll(): void;
+}
+
 // ---------- observability ----------
 
 export interface Logger {
