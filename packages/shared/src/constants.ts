@@ -31,6 +31,13 @@ export const POST_SEEK_COOLDOWN_MS = 1_500;
 export const AUTOPLAY_DETECT_MS = 1_500;
 export const END_TOLERANCE_S = 3;
 export const CLOCK_SYNC_INTERVAL_MS = 60_000;
+export const CLOCK_SYNC_SAMPLES = 5;
+export const CLOCK_SYNC_SAMPLE_DELAY_MS = 200;
+export const CLOCK_SYNC_TIMEOUT_MS = 2_000;
+/** How often the on-screen playback time refreshes. */
+export const UI_TIME_REFRESH_MS = 250;
+/** Arrow-key seek step. */
+export const SEEK_STEP_S = 5;
 
 // ---------- rate limits (LLD SP-17): token bucket per user per rule ----------
 export const RATE_LIMITS = {

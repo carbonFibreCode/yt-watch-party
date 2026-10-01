@@ -112,7 +112,7 @@ All versions were checked against the npm registry on 2026-10-01. **Rule: use a 
 | Validation + types | `zod` | 4.6.5 | One schema produces both the runtime validator and the static type. Shared by client and server |
 | Auth (guest + login) | `better-auth` (+ `anonymous` plugin, `drizzle` adapter) | 1.7.7 | Guest sessions (`signIn.anonymous`) and email/password in one library, with **anonymous → real account linking** (`onLinkAccount`). Cookie sessions work with same-origin WebSockets. `getSession({headers: fromNodeHeaders(...)})` works directly on the Socket.IO handshake |
 | ORM + migrations | `drizzle-orm` + `drizzle-kit` + `pg` | 0.45.3 / 8.23.1 | SQL-first, no engine binary, first-class better-auth adapter. Prisma's `latest` tag is currently an 8.0 **RC**, which we don't want to depend on in a 24h build |
-| YouTube player | `youtube-player` (gajus) | 5.6.0 | Promise-based wrapper over the IFrame API that queues calls until the player is ready. `react-youtube` is a thin React wrapper around this same lib. We need imperative control, so we use the core directly |
+| YouTube player | `youtube-player` (gajus) + `@types/youtube-player` 5.5.11 | 5.6.0 | Promise-based wrapper over the IFrame API that queues calls until the player is ready. `react-youtube` is a thin React wrapper around this same lib. We need imperative control, so we use the core directly |
 | YouTube ID parsing | `get-video-id` | 4.2.0 | Handles watch, `youtu.be`, `/shorts/`, `/live/`, `/embed/`, and `?si=`/`t=` params. Maintained (2026) |
 | Clock sync | `timesync` | 1.0.11 | Implements the NTP-style multi-sample offset algorithm with a pluggable transport (`send`/`receive`). We plug in Socket.IO acks. Small and dependency-free. The algorithm is mature, so the age is acceptable |
 | Rate limiting | `rate-limiter-flexible` | 11.2.1 | Token-bucket with `RateLimiterMemory` and `RateLimiterRedis` (node-redis supported), one API for both (Strategy) |
@@ -127,7 +127,7 @@ All versions were checked against the npm registry on 2026-10-01. **Rule: use a 
 | Reaction animation | `motion` | 13.5.0 | `AnimatePresence` floating emojis in about 20 lines |
 | Tests | `vitest` 5, `@playwright/test` 1.63, `@testing-library/react` 16 + `jest-dom`, `jsdom` **29.1.1** | — | Fast TS-native unit and integration tests. Two-context browser E2E (pulled forward to P6 to verify the two-browser exit criterion). jsdom 30 requires Node ≥ 24.15; 29.1.1 is the newest that supports the project's Node 24.12 |
 | Theme | own `ThemeProvider` + `public/theme-init.js` | — | `next-themes` (added by the shadcn CLI) was **rejected**: it injects an inline `<script>`, which React 19 warns about on every render and our CSP (`script-src 'self'`) blocks in production |
-| UI primitives | `radix-ui` (unified package) via `shadcn add` | 1.6.7 | Generated into `apps/web/src/components/ui`. `shadcn init` hung on an interactive prompt, so `components.json` and the theme tokens are written by hand (the same files the CLI writes) |
+| UI primitives | `radix-ui` (unified package) via `shadcn add` | 1.6.7 | Generated into `apps/web/src/components/ui`. `shadcn init` hung on an interactive prompt, so `components.json` and the theme tokens are written by hand (the same files the CLI writes) | **Every `shadcn add` re-adds a stray npm package named `cn` and imports from it**, so remove it and repoint the import to `@/lib/utils` each time
 | Language | `typescript` (pinned **6.0.3**) | 6.0.3 | TS 7 (native compiler) is `latest`, but `typescript-eslint` 8.71 requires `>=4.8.4 <6.1.0`. Type-aware lint is mandatory (rules §6), so we pin the newest supported 6.0.x |
 | Lint | `eslint` 10 + `typescript-eslint` (strict-type-checked) + `eslint-plugin-import-x` + `eslint-import-resolver-typescript` + `eslint-config-prettier` + `eslint-plugin-react-hooks` + `eslint-plugin-react-refresh` | 10.11 / 8.71 / 4.17 / 4.4 / 10.1 / 7.1 / 0.5 | `import-x/no-restricted-paths` enforces the layering rule (§1.4). `eslint-plugin-import` was rejected because it doesn't support ESLint 10 |
 | Format | `prettier` | 3.9.9 | |
@@ -874,19 +874,22 @@ type RequestedAction =
 **Why.** Positions are anchored to server time (SP-5). A client clock that's 2s off would project positions 2s off, and the drift loop would then "fix" a correct player in a loop.
 
 **What.**
-- `ServerClock` port (client): `now(): number` (server-epoch ms estimate), `ready: Promise<void>`.
-- `TimesyncClock` adapter around `timesync`.
+- `ServerClock` port (client): `now(): number`, the server-epoch ms estimate.
+- `TimesyncClock` adapter around `timesync` 1.0.11, which ships no types. `src/types/timesync.d.ts` declares exactly the subset we use, mirroring that version's `lib/timesync.js`.
 
 **How.**
-- **Client:**
+- **Client:** `TimesyncClock(transport)`, where `transport` is the room's *quiet* RPC (`quietRpc('timesync', request)`), so clock samples never toast.
   ```ts
-  const ts = timesync.create({ server: socket, interval: CLOCK_SYNC_INTERVAL_MS, repeat: 5, delay: 200, timeout: 2000 });
-  ts.send = (_to, data, timeout) => socket.timeout(timeout).emitWithAck('timesync', data).then(res => ts.receive(null, res));
+  const sync = create({ server: 'watchparty', interval: CLOCK_SYNC_INTERVAL_MS, repeat: CLOCK_SYNC_SAMPLES,
+                        delay: CLOCK_SYNC_SAMPLE_DELAY_MS, timeout: CLOCK_SYNC_TIMEOUT_MS });
+  sync.send = async (_to, request) => { sync.receive(undefined, await transport(request)); };
+  sync.on('error', () => undefined);   // failed samples are dropped by timesync; keep the console clean
   ```
-- **Server:** the `timesync` side-channel handler acks `{ jsonrpc: '2.0', id: data.id, result: Date.now() }`.
-- timesync takes 5 samples, discards outliers, and averages offsets weighted toward low round-trip-time samples.
-- `ready` resolves on the first `change` event. Until then, `now()` falls back to `Date.now()`, with initial offset 0.
-- Socket.IO acks run over the already-open WebSocket, so a sample costs about one round trip.
+- **Lifecycle:** `start()` is called on every socket `connect` (idempotent) and `stop()` on unmount.
+- **Server:** the `Timesync` handler acks `{ jsonrpc: '2.0', id, result: clock.now() }`. It needs no room membership and uses the `telemetry` rate rule.
+- **Samples:** timesync takes `CLOCK_SYNC_SAMPLES` samples and discards high-round-trip outliers. The first sample is applied immediately.
+- **Fallbacks:** before any sample, or if all fail, `now()` is `Date.now()`. A failed resync keeps the previous offset.
+- **Verified** with a fake-timer test where the server is 2.5 s ahead: the clock converges to that offset.
 
 ---
 
@@ -898,50 +901,69 @@ type RequestedAction =
 3. **Autoplay blocking:** browsers refuse unmuted programmatic play.
 4. **Ads and buffering** shift a client's local timeline.
 
-**What.** A framework-free, unit-tested `SyncEngine` behind two ports, plus a thin React hook.
+**What.** A framework-free, unit-tested `SyncEngine` behind two ports (`features/player/ports.ts`), plus thin React hooks.
 
 ```ts
-interface VideoPlayer {                          // port; YouTubePlayerAdapter wraps `youtube-player`
-  load(videoId: string, startSeconds: number, autoplay: boolean): Promise<void>;
-  play(): Promise<void>; pause(): Promise<void>; seekTo(seconds: number): Promise<void>;
+interface VideoPlayer {                          // YouTubePlayerAdapter wraps `youtube-player`
+  load(videoId, startSeconds, autoplay): Promise<void>;          // loadVideoById | cueVideoById
+  play(); pause(); seekTo(seconds);                              // Promise<void>
   getCurrentTime(): Promise<number>; getDuration(): Promise<number>;
   getState(): Promise<PlayerState>;              // 'unstarted'|'ended'|'playing'|'paused'|'buffering'|'cued'
-  onStateChange(cb: (s: PlayerState) => void): () => void;
-  onError(cb: (code: number) => void): () => void;
-  setMuted(m: boolean): Promise<void>;
+  isMuted(): Promise<boolean>; setMuted(muted): Promise<void>;
+  onStateChange(cb): () => void; onError(cb: (code: number) => void): () => void;
   destroy(): void;
 }
 
+type SyncStatus = 'idle' | 'loading' | 'in_sync' | 'buffering' | 'muted' | 'blocked' | 'embed_error';
+
 class SyncEngine {
-  constructor(private player: VideoPlayer, private clock: ServerClock, private emit: SyncEngineOutput, private cfg = SYNC_CONFIG) {}
-  apply(state: PlaybackView): Promise<void>;     // on sync_state / join snapshot
-  tick(): Promise<void>;                          // every DRIFT_CHECK_MS
-  onPlayerState(s: PlayerState): void;            // ENDED → emit.videoEnded; first PLAYING → emit.reportDuration
-  get status(): 'in_sync' | 'syncing' | 'autoplay_blocked' | 'buffering';
+  constructor(player: VideoPlayer, clock: ServerClock, output: SyncEngineOutput, config = DEFAULT_SYNC_CONFIG);
+  apply(state: PlaybackView): Promise<void>;   // join snapshot / sync_state; stale revisions ignored
+  tick(): Promise<void>;                        // every DRIFT_CHECK_MS and on tab visible
+  userGesture(): Promise<void>;                 // "tap to unmute" / "click to join playback"
+  dispose(): void;
+}
+interface SyncEngineOutput {                    // the engine never talks to sockets or React directly
+  durationKnown(videoId, seconds): void;        // → quietRpc('report_duration') + UI duration
+  ended(videoId, rev): void;                    // → quietRpc('video_ended')
+  statusChanged(status): void;
+  driftMeasured(driftS: number | null): void;
 }
 ```
 
 **How.**
-1. **No echo by construction.** The YouTube iframe is created with `controls: 0, disablekb: 1, playsinline: 1, rel: 0, iv_load_policy: 3`. A transparent overlay `<div>` blocks pointer events on the iframe. **The only way to produce an intent is our own `ControlBar`**, which calls `rpc('play')`, etc. Player events are therefore never interpreted as user intent, so the echo loop can't happen. This replaces the fragile "expected-state guard" approach.
-2. **No optimistic UI for playback.** Clicking Play sends the intent. The UI changes when `sync_state` arrives (~1 RTT, typically under 150ms). The trade-off is a small delay in exchange for a single code path and no rollback logic. The button shows a pending spinner after 150ms.
-3. **`apply(state)`:**
-   - Ignore it if `state.rev <= lastAppliedRev`.
-   - `expected = projectPosition(state, clock.now())`.
-   - If `videoId` changed: `player.load(videoId, expected, state.playState === 'playing')`.
-   - Otherwise: seek if `|actual − expected| > SEEK_THRESHOLD_S`, then play or pause to match.
-   - Record `lastSeekAt`.
-4. **`tick()` drift loop.** Runs only when not `buffering`, not within `POST_SEEK_COOLDOWN_MS`, and the tab is visible.
-   - Recompute `expected`. If `|drift| > SEEK_THRESHOLD_S`, call `seekTo(expected)`.
-   - If the room is playing but the player is paused or unstarted, call `play()`. If play doesn't reach `playing`/`buffering` within `AUTOPLAY_DETECT_MS`, set `status = 'autoplay_blocked'`.
-   - This covers ads, tab throttling, and slow buffering.
-5. **Autoplay policy.** When `autoplay_blocked`, `PlayerSurface` shows a "Click to join playback" overlay. One click inside our page is a user gesture, after which `player.play()` and `apply(latest)` run. The fallback is `setMuted(true)` + play + an "Unmute" pill.
-6. **Visibility.** On `visibilitychange → visible`, run `tick()` immediately so a backgrounded tab snaps back.
-7. **UI time display** polls `getCurrentTime()` with `requestAnimationFrame` (throttled to 4Hz) for the scrubber. This is display only and never emits anything.
-8. **Seek UX.** The shadcn `Slider` keeps local drag state and emits `seek` only on `onValueCommit` (release), so there's one event per scrub and no debounce library is needed. Keyboard: ←/→ = ±5s, Space = play/pause. These map to the same `rpc` calls, gated by `useCan`.
-
-`usePlayerSync(containerRef)` creates the adapter, clock, and engine. It subscribes to the store's `playback` slice, starts the `setInterval(tick)`, and returns `{status}`. The rest is pure TS.
-
----
+1. **No echo by construction.**
+   - The iframe uses `controls: 0, disablekb: 1, fs: 0, playsinline: 1, rel: 0, iv_load_policy: 3, origin`.
+   - A transparent layer over it swallows every click.
+   - **Intents only come from our `ControlBar` / `VideoUrlForm` / keyboard shortcuts.** The engine only *reads* the player in order to correct it.
+2. **No optimistic UI for playback.** A click sends the intent; the UI changes when `sync_state` arrives (one round trip). A single code path, no rollback logic.
+3. **Serialized reconciliation.** `apply` and `tick` both enqueue `reconcile()` on one promise chain, so player calls never interleave. Overlapping updates **coalesce to the latest room state** (the newest target wins, and an intermediate video is never loaded).
+4. **`reconcile()`:**
+   - `expected = projectPosition(timelineFromView(target), clock.now())`.
+   - **New video:** `load(videoId, expected, playing)` (cued when paused), then start a cooldown.
+   - **Room paused, player playing:** pause immediately, even during a cooldown.
+   - **Drift:** outside `POST_SEEK_COOLDOWN_MS`, measure drift and `seekTo(expected)` if `|drift| > SEEK_THRESHOLD_S`. The cooldown only suppresses drift *correction*; **play/pause are always enforced.** (A test caught the earlier version skipping play after a seek.)
+   - **Ended:** a player in `ended` is never restarted. The server decides what comes next.
+5. **Autoplay.**
+   - When play was requested but the player isn't playing or buffering after `AUTOPLAY_DETECT_MS`, the engine **mutes and plays** (always allowed) → status `muted`, and the UI shows "Tap to unmute".
+   - If even muted play is blocked → status `blocked`, and the UI shows "Click to join playback".
+   - `userGesture()` unmutes and retries.
+6. **Status.** A `playing` player event immediately promotes `loading` or `buffering` to `in_sync`.
+7. **End and duration.**
+   - The first `playing` of each video reports its duration once.
+   - `ended` is reported once per revision, and only near the end (within `END_TOLERANCE_S`).
+   - YouTube errors 100/101/150 → `embed_error`. The engine stops retrying that video until the room picks another.
+8. **Visibility.** `visibilitychange → visible` runs `tick()` immediately.
+9. **UI time display.** `usePlaybackPosition()` projects the canonical server timeline with the synced clock every `UI_TIME_REFRESH_MS`, using the same math as the server and the engine. The player is never polled for display: the engine already keeps it within 1 s of that position.
+10. **Controls.**
+    - `usePlaybackCommand()` returns `{ mode: 'direct' | 'request' | 'none', send(action) }` from `useCan`.
+    - Staff act directly, participants send `request_action` (with a "sent to the host" toast), and viewers get disabled controls with an explanatory tooltip.
+    - The scrubber emits `seek` only on `onValueCommit`.
+    - Keyboard (Space/K, ←/→ ±`SEEK_STEP_S`) is enabled for direct mode only, so requests can't be spammed from the keyboard.
+11. **Adapter details.**
+    - The IFrame API *replaces* the element it's given, so `usePlayerSync` creates that host element imperatively inside a React-owned container.
+    - The `@types/youtube-player` typings omit `off`, so the adapter subscribes once per event and fans out to its own listener sets.
+12. **Observability.** The player surface exposes `data-sync-status`, `data-player-state` and `data-drift-ms`. These are used by the real-YouTube E2E test, which asserts drift under 1 s after seeks between two browsers.
 
 ## SP-14 Client State & Socket Binding
 
