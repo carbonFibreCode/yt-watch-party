@@ -1,10 +1,12 @@
 import { z } from 'zod';
-import type { AckError } from '../errors';
-import { RoomName, VideoUrl } from './primitives';
-import type { Role, RoomCode } from './primitives';
-import type { VideoView } from './views';
+import { ErrorCode } from '../errors';
+import { Role, RoomCode, RoomName, VideoUrl } from './primitives';
+import { VideoViewSchema } from './views';
 
-/** REST contract (LLD SP-18). Request bodies are zod-validated; responses are typed. */
+/**
+ * REST contract (LLD SP-18). Request bodies and responses are zod schemas; types are derived from
+ * them, so the server validates input and the client validates what it receives.
+ */
 
 export const CreateRoomBody = z.strictObject({
   name: RoomName.optional(),
@@ -12,33 +14,37 @@ export const CreateRoomBody = z.strictObject({
 });
 export type CreateRoomBody = z.infer<typeof CreateRoomBody>;
 
-export interface CreateRoomResponse {
-  readonly roomId: RoomCode;
-}
+export const CreateRoomResponse = z.object({ roomId: RoomCode });
+export type CreateRoomResponse = z.infer<typeof CreateRoomResponse>;
 
-export interface RoomPreview {
-  readonly roomId: RoomCode;
-  readonly name: string;
+export const RoomPreview = z.object({
+  roomId: RoomCode,
+  name: z.string(),
   /** null when the room currently has no members. */
-  readonly hostName: string | null;
-  readonly participantCount: number;
-  readonly video: VideoView | null;
-}
+  hostName: z.string().nullable(),
+  participantCount: z.number().int().nonnegative(),
+  video: VideoViewSchema.nullable(),
+});
+export type RoomPreview = z.infer<typeof RoomPreview>;
 
-export interface RoomSummary {
-  readonly roomId: RoomCode;
-  readonly name: string;
-  readonly lastRole: Role;
-  readonly lastJoinedAt: number;
-}
+export const RoomSummary = z.object({
+  roomId: RoomCode,
+  name: z.string(),
+  lastRole: Role,
+  lastJoinedAt: z.number(),
+});
+export type RoomSummary = z.infer<typeof RoomSummary>;
+export const RoomSummaryList = z.array(RoomSummary);
 
-export interface HealthResponse {
-  readonly status: 'ok' | 'degraded';
+export const HealthResponse = z.object({
+  status: z.enum(['ok', 'degraded']),
   /** One entry per configured dependency (e.g. `db`, `redis`); true when reachable. */
-  readonly checks: Readonly<Record<string, boolean>>;
-  readonly uptimeS: number;
-}
+  checks: z.record(z.string(), z.boolean()),
+  uptimeS: z.number(),
+});
+export type HealthResponse = z.infer<typeof HealthResponse>;
 
-export interface HttpErrorResponse {
-  readonly error: AckError;
-}
+export const HttpErrorResponse = z.object({
+  error: z.object({ code: z.enum(Object.values(ErrorCode)), message: z.string() }),
+});
+export type HttpErrorResponse = z.infer<typeof HttpErrorResponse>;

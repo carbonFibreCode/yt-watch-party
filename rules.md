@@ -119,6 +119,7 @@ Before writing any non-trivial utility (more than ~20 lines, or anything touchin
 - `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` are on.
 - **No `any`.** Use `unknown` + narrowing. No `as` casts except `as const` and in test builders. No `!` non-null assertions in production code. No `@ts-ignore`; `@ts-expect-error` is allowed only in tests, with a reason.
 - Prettier formats. ESLint (`strict-type-checked`) passes with **zero warnings**.
+- **Generated code:** `apps/web/src/components/ui/**` is vendored shadcn/ui output. It's added via `shadcn add` and only those two generated-code lint rules (explicit return types, fast-refresh exports) are relaxed there. Edit generated files only when the change is intentional and documented in the file.
 - Prefer `readonly` fields, `ReadonlyArray`, and immutable value objects. Mutate only inside aggregates.
 - `async`/`await` only. No floating promises (`@typescript-eslint/no-floating-promises`). Every `setInterval`/`setTimeout`/listener has a matching cleanup.
 - Named exports only (except where a framework requires default exports). One primary class or component per file. File name = export name.

@@ -1,15 +1,14 @@
-import type { ReactionEmoji, Role, RoomCode, UserId, VideoId } from './primitives';
+import { z } from 'zod';
+import { VideoId } from './primitives';
+import type { ReactionEmoji, Role, RoomCode, UserId } from './primitives';
 
 /** Read models sent from server to client (LLD SP-1). Produced only by the server's RoomPresenter. */
 
 export type Presence = 'online' | 'away';
 export type PlayState = 'playing' | 'paused' | 'idle';
 
-export interface VideoView {
-  readonly id: VideoId;
-  readonly title: string;
-  readonly thumbnailUrl: string;
-}
+export const VideoViewSchema = z.object({ id: VideoId, title: z.string(), thumbnailUrl: z.string() });
+export type VideoView = z.infer<typeof VideoViewSchema>;
 
 export interface UserRef {
   readonly userId: UserId;

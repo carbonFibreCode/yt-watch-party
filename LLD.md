@@ -125,7 +125,9 @@ All versions were checked against the npm registry on 2026-10-01. **Rule: use a 
 | Frontend | `react` 19 + `vite` + `react-router` 8 + `@tanstack/react-query` 5 + `zustand` 5 | — | Vite is brief-recommended. React Query for REST. Zustand for socket-fed room state (selectors avoid re-render storms) |
 | UI kit | `tailwindcss` 4 + `shadcn/ui` (Radix) + `lucide-react` + `sonner` | — | Accessible primitives (Dialog, DropdownMenu, Slider, Tabs, Tooltip). Sonner for toasts with action buttons (Approve/Reject) |
 | Reaction animation | `motion` | 13.5.0 | `AnimatePresence` floating emojis in about 20 lines |
-| Tests | `vitest` 5, `@playwright/test` 1.63 | — | Fast TS-native unit and integration tests. Two-context browser E2E |
+| Tests | `vitest` 5, `@playwright/test` 1.63, `@testing-library/react` 16 + `jest-dom`, `jsdom` **29.1.1** | — | Fast TS-native unit and integration tests. Two-context browser E2E (pulled forward to P6 to verify the two-browser exit criterion). jsdom 30 requires Node ≥ 24.15; 29.1.1 is the newest that supports the project's Node 24.12 |
+| Theme | own `ThemeProvider` + `public/theme-init.js` | — | `next-themes` (added by the shadcn CLI) was **rejected**: it injects an inline `<script>`, which React 19 warns about on every render and our CSP (`script-src 'self'`) blocks in production |
+| UI primitives | `radix-ui` (unified package) via `shadcn add` | 1.6.7 | Generated into `apps/web/src/components/ui`. `shadcn init` hung on an interactive prompt, so `components.json` and the theme tokens are written by hand (the same files the CLI writes) |
 | Language | `typescript` (pinned **6.0.3**) | 6.0.3 | TS 7 (native compiler) is `latest`, but `typescript-eslint` 8.71 requires `>=4.8.4 <6.1.0`. Type-aware lint is mandatory (rules §6), so we pin the newest supported 6.0.x |
 | Lint | `eslint` 10 + `typescript-eslint` (strict-type-checked) + `eslint-plugin-import-x` + `eslint-import-resolver-typescript` + `eslint-config-prettier` + `eslint-plugin-react-hooks` + `eslint-plugin-react-refresh` | 10.11 / 8.71 / 4.17 / 4.4 / 10.1 / 7.1 / 0.5 | `import-x/no-restricted-paths` enforces the layering rule (§1.4). `eslint-plugin-import` was rejected because it doesn't support ESLint 10 |
 | Format | `prettier` | 3.9.9 | |
@@ -790,7 +792,7 @@ Each presenter calls `RoomPresenter.participants(room)`, so the participants lis
 | User reconnects within grace | `join()` sees an existing away member → back online → `presence_changed`. Timer is cancelled |
 | Grace timer fires | `mutate(room => room.reapAway(now))`. Removes members still away past the deadline → `user_left (reason: timeout)`. If one of them was host → `HostTransferred(succession)` |
 | Instance crashes before its timer fires | **Lazy reaping:** every `mutate` calls `reapAway(now)` first, so the next action in that room reconciles. Correctness never depends on the timer |
-| Explicit `leave_room` / tab close (`pagehide` → emit) | Immediate `leave()`, no grace |
+| Explicit `leave_room` (the Leave button) | Immediate `leave()`, no grace. Closing or refreshing the tab does **not** send `leave_room`: the grace period absorbs it, so a refresh doesn't spam leave/join |
 | Kicked user | Banned in the snapshot (`bans`) and removed. Sockets disconnected. Future `join` → `BANNED` |
 | Room with nobody online | Hot key keeps its TTL. After `HOT_ROOM_TTL` it falls back to the Postgres snapshot. A rejoin later restores it (read-through) |
 | Role memory | `leave`/`reap` store `roleMemory[userId] = role` (moderator/viewer). Rejoin restores the role. A former host returns as moderator if succession happened |
@@ -946,21 +948,34 @@ class SyncEngine {
 **Why.** Socket events arrive outside React's lifecycle. Components need fine-grained subscriptions (the participant list shouldn't re-render the player). Ack errors need uniform handling.
 
 **What.**
-- `lib/socket.ts`: `createSocket()` is a factory returning a typed `Socket<ServerToClientEvents, ClientToServerEvents>` with `{ transports: ['websocket'], withCredentials: true, autoConnect: false }`.
-- `lib/rpc.ts`: the one place that sends commands (DRY):
-  ```ts
-  export async function rpc<E extends ClientEventName>(e: E, p: ClientPayload<E>): Promise<AckData[E]> {
-    const res = await socket.timeout(ACK_TIMEOUT_MS).emitWithAck(e, p).catch(() => ({ ok: false, error: { code: 'TIMEOUT', message: ERROR_MESSAGES.TIMEOUT } }));
-    if (!res.ok) { toast.error(res.error.message); throw new RpcError(res.error.code); }
-    return res.data;
-  }
-  ```
-- `features/room/store.ts` is a Zustand store with slices: `self`, `participants`, `playback`, `queue`, `requests`, `chat`, `reactions`, `connection`. Its actions mirror server events (`onUserJoined`, `onSyncState`, …).
-- `bindRoomEvents(socket, store)` is the single registration point for all server→client listeners and returns an unbind function. Toast side effects (joins, role changes, kicked) live here, not in components.
-- `useRoomConnection(code)`: connect → `rpc('join_room')` → `store.hydrate(ack)`.
-  - On `connect` after a disconnect with `!socket.recovered`, it re-runs join (rehydrate).
-  - On `kicked`, it navigates to `/removed`.
+- `lib/socket.ts`: `createSocket()` is a factory returning a typed `Socket<ServerToClientEvents, ClientToServerEvents>` with `{ transports: ['websocket'], withCredentials: true, autoConnect: false }` (same origin).
+- `lib/rpc.ts`: `createRpc(socket, { onError })` returns the one function that sends commands (DRY).
+  - **Typed emitter map:** it dispatches through a map with one acknowledged emitter per contract event. Socket.IO's typings can't express a generic "emit `E` with its payload" without casts. The map is a mapped type over `ClientEventName`, so adding an event to the contract fails the client build until it's handled.
+  - **Errors:** a refusal calls `onError` (the toast) once and throws `RpcError(code)`. An ack timeout becomes `TIMEOUT`.
+- `lib/api.ts`: the REST client. **Responses are validated with the shared zod schemas** (`CreateRoomResponse`, `RoomPreview`, `RoomSummaryList`, `HttpErrorResponse`), so REST types are derived from schemas on both sides. Failures throw `ApiError(code, status)`.
+- `lib/queryKeys.ts`: every TanStack Query key in one place.
+- `features/room/store.ts`: `createRoomStore()` builds a **vanilla Zustand store per room visit**, provided through `RoomContext`, so there's no stale state between rooms.
+  - **State:** `status` (connecting/joined/failed/kicked), `connection` (online/reconnecting), room identity, `participants`, `playback`, `queue`, `requests`, and `chat` (messages + system lines, capped at `CHAT_RENDER_LIMIT`).
+  - **Ordering and dedup:** `applyPlayback` ignores out-of-order revisions. Requests and chat messages are de-duplicated by id.
+  - **Subscriptions:** components subscribe through `useRoom(selector)` only.
+- `features/room/bindRoomEvents.ts` is the single registration point for server→client listeners, and returns an unbind function.
+  - Each event is registered explicitly, again because listener types can't be forwarded generically.
+  - It writes system lines ("Sam joined", "Sam lost connection", "Mo is now a moderator").
+  - It raises toasts through a `Notifier` port (sonner in the app, a recorder in tests) for events that concern the current user.
+- `useRoomConnection(roomId)` owns one socket for the visit:
+  - It binds events, then on every **fresh** `connect` runs `rpc('join_room')` → `store.hydrate(ack)`. A recovered connection keeps its membership and skips this.
+  - `connect_error: UNAUTHENTICATED` → failed. Other disconnects → `reconnecting`.
+  - **Unmount only disconnects.** Leaving is explicit (the Leave button sends `leave_room`), so a refresh or tab close is absorbed by the grace period instead of producing a leave/join pair.
+  - `kicked` sets the status and the screen redirects to `/removed`.
 - `useCan(capability)` uses the self role from the store and the **shared** `PermissionPolicy.can`.
+- **Routing (React Router 8, data mode):**
+  - `/` is `LandingPage` (create / join / recent rooms).
+  - `/r/:code` is `RoomPage`: validate the code, then the public preview query, then (no chosen name) `GuestJoinCard` → `ensureIdentity(name)`, then `RoomSession` keyed by user id.
+  - `/removed` and `*` are message pages.
+  - A root `ErrorBoundary` catches anything unexpected.
+- **Identity** (`features/auth`): `ensureIdentity(name)` signs in as an anonymous guest if needed, then renames (better-auth client). `UserMenu` offers rename, create account / sign in (`AuthDialog`, email + password), the theme toggle and sign out.
+- **Bundles:** the room route is `lazy`-loaded (socket, room UI). React and React Router are split into long-lived vendor chunks for caching. No chunk exceeds Vite's 500 kB warning.
+- **Theme:** dark by default with a persisted light option. `lib/theme.tsx` holds the provider. `public/theme-init.js` (a same-origin file, so CSP-safe) applies the stored theme before first paint.
 
 ---
 

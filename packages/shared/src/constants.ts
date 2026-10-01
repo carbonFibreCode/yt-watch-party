@@ -57,6 +57,8 @@ export const SNAPSHOT_FLUSH_MS = 5_000;
 // ---------- chat, reactions, queue ----------
 export const CHAT_MAX_LEN = 500;
 export const CHAT_HISTORY_LIMIT = 50;
+/** Client keeps at most this many chat/system lines in memory. */
+export const CHAT_RENDER_LIMIT = 200;
 export const QUEUE_MAX = 50;
 export const REACTION_SET = ['👍', '😂', '😮', '❤️', '🔥', '👏', '😢', '🎉'] as const;
 

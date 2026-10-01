@@ -14,12 +14,14 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "lint": "eslint . --max-warnings 0",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "pnpm -r typecheck && tsc -p tsconfig.json --noEmit && tsc -p e2e/tsconfig.json --noEmit",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "e2e": "playwright test"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@playwright/test": "1.63.0",
     "@types/node": "24.19.0",
     "@vitest/coverage-v8": "5.0.3",
     "eslint": "10.11.0",
