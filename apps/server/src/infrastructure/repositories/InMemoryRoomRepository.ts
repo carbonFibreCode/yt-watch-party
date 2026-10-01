@@ -1,0 +1,35 @@
+import type { RoomCode } from '@watchparty/shared';
+import type { RoomRepository } from '../../application/ports';
+import { DomainError } from '../../domain/DomainError';
+import type { RoomSnapshot } from '../../domain/snapshot';
+import { RoomSnapshotCodec } from './RoomSnapshotCodec';
+
+/**
+ * Single-instance room store (Strategy: used when REDIS_URL is unset, and in tests).
+ * Stores encoded JSON like the Redis store does, so callers can never alias stored state.
+ */
+export class InMemoryRoomRepository implements RoomRepository {
+  private readonly rooms = new Map<RoomCode, string>();
+
+  create(snapshot: RoomSnapshot): Promise<void> {
+    if (this.rooms.has(snapshot.id)) {
+      return Promise.reject(new DomainError('CONFLICT'));
+    }
+    this.rooms.set(snapshot.id, RoomSnapshotCodec.encode(snapshot));
+    return Promise.resolve();
+  }
+
+  load(id: RoomCode): Promise<RoomSnapshot | null> {
+    const json = this.rooms.get(id);
+    return Promise.resolve(json === undefined ? null : RoomSnapshotCodec.decode(json));
+  }
+
+  async compareAndSet(snapshot: RoomSnapshot, expectedVersion: number): Promise<boolean> {
+    const current = await this.load(snapshot.id);
+    if (current?.version !== expectedVersion) {
+      return false;
+    }
+    this.rooms.set(snapshot.id, RoomSnapshotCodec.encode(snapshot));
+    return true;
+  }
+}
