@@ -19,7 +19,8 @@ export interface CreateRoomResponse {
 export interface RoomPreview {
   readonly roomId: RoomCode;
   readonly name: string;
-  readonly hostName: string;
+  /** null when the room currently has no members. */
+  readonly hostName: string | null;
   readonly participantCount: number;
   readonly video: VideoView | null;
 }

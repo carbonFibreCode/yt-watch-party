@@ -6,6 +6,7 @@ import { Room } from '../domain/Room';
 import type { RoomSnapshot } from '../domain/snapshot';
 import { KeyedMutex } from './KeyedMutex';
 import type { Clock, IdGenerator, RoomRepository } from './ports';
+import type { ResolvedVideo } from './VideoResolver';
 
 export interface MutationResult<T> {
   readonly result: T;
@@ -25,10 +26,18 @@ export class RoomService {
     private readonly locks: KeyedMutex = new KeyedMutex(),
   ) {}
 
-  /** Creates a room under a fresh code, retrying on the (rare) code collision. */
-  async create(name: string, host: UserRef): Promise<Room> {
+  /**
+   * Creates a room under a fresh code, retrying on the (rare) code collision. An initial video is
+   * cued paused; creation events are discarded because nobody is connected yet.
+   */
+  async create(name: string, host: UserRef, initial?: ResolvedVideo): Promise<Room> {
     for (let attempt = 1; attempt <= ROOM_CODE_MAX_ATTEMPTS; attempt += 1) {
-      const room = Room.create({ id: this.ids.roomCode(), name, host, now: this.clock.now() });
+      const now = this.clock.now();
+      const room = Room.create({ id: this.ids.roomCode(), name, host, now });
+      if (initial !== undefined) {
+        room.cueVideo(initial.video, initial.startAt, now);
+        room.pullEvents();
+      }
       try {
         await this.repository.create(room.toSnapshot());
         return room;

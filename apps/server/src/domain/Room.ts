@@ -255,6 +255,11 @@ export class Room {
     this.applyPlayback(this.playbackState.load(video, startAt, now, true));
   }
 
+  /** Loads a video paused, e.g. the initial video of a new room, so it does not play to an empty room. */
+  cueVideo(video: VideoRef, startAt: number, now: number): void {
+    this.applyPlayback(this.playbackState.load(video, startAt, now, false));
+  }
+
   reportDuration(videoId: VideoId, duration: number): void {
     this.playbackState = this.playbackState.withDuration(videoId, duration);
   }

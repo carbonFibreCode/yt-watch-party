@@ -1,4 +1,5 @@
 import type { AddressInfo } from 'node:net';
+import type { RequestHandler } from 'express';
 import { pino } from 'pino';
 import { io as connectClient } from 'socket.io-client';
 import type { Socket as ClientSocket } from 'socket.io-client';
@@ -11,45 +12,68 @@ import type {
   ServerToClientEvents,
 } from '@watchparty/shared';
 import { ACK_TIMEOUT_MS } from '@watchparty/shared';
+import type { SessionResolver } from '../application/ports';
 import { FakeClock, ManualScheduler, StubVideoMetadataProvider } from '../application/test/fakes';
 import { composeApp } from '../compose';
 import { StaticSessionResolver, TEST_USER_HEADER } from '../infrastructure/auth/StaticSessionResolver';
+import { createMemoryPersistence } from '../infrastructure/persistence';
+import type { Persistence } from '../infrastructure/persistence';
 
 export type Client = ClientSocket<ServerToClientEvents, ClientToServerEvents>;
 
 export const ORIGIN = 'http://localhost:5173';
 const EVENT_TIMEOUT_MS = 2_000;
 
+export interface StartOptions {
+  readonly webDistDir?: string;
+  readonly persistence?: Persistence;
+  /** Real auth (better-auth) instead of the x-test-user header. */
+  readonly auth?: { readonly sessions: SessionResolver; readonly handler: RequestHandler };
+}
+
+/** A session cookie, or "id:name" for the x-test-user header. */
+export type Identity = string | { readonly cookie: string } | null;
+
 /** The real composed server on an ephemeral port, with deterministic time and timers. */
-export const startServer = async (webDistDir?: string) => {
+export const startServer = async (options: StartOptions = {}) => {
   const clock = new FakeClock();
   const scheduler = new ManualScheduler();
   const metadata = new StubVideoMetadataProvider();
   const app = composeApp({
-    config: { nodeEnv: 'test', port: 0, logLevel: 'silent', publicOrigin: ORIGIN, webDistDir },
+    config: {
+      nodeEnv: 'test',
+      port: 0,
+      logLevel: 'silent',
+      publicOrigin: ORIGIN,
+      webDistDir: options.webDistDir,
+    },
     logger: pino({ level: 'silent' }),
-    sessions: new StaticSessionResolver(),
+    sessions: options.auth?.sessions ?? new StaticSessionResolver(),
+    persistence: options.persistence ?? createMemoryPersistence(),
+    ...(options.auth === undefined ? {} : { authHandler: options.auth.handler }),
     clock,
     scheduler,
     videoMetadata: metadata,
   });
-  await new Promise<void>((resolve) => app.httpServer.listen(0, resolve));
+  await app.start(0);
   const url = `http://localhost:${String((app.httpServer.address() as AddressInfo).port)}`;
   const clients: Client[] = [];
 
   const connect = (
-    user: string | null,
-    options: { origin?: string; reconnection?: boolean } = {},
+    identity: Identity,
+    connectOptions: { origin?: string; reconnection?: boolean } = {},
   ): Promise<Client> => {
-    const headers: Record<string, string> = { origin: options.origin ?? ORIGIN };
-    if (user !== null) {
-      headers[TEST_USER_HEADER] = user;
+    const headers: Record<string, string> = { origin: connectOptions.origin ?? ORIGIN };
+    if (typeof identity === 'string') {
+      headers[TEST_USER_HEADER] = identity;
+    } else if (identity !== null) {
+      headers.cookie = identity.cookie;
     }
     const socket: Client = connectClient(url, {
       transports: ['websocket'],
       extraHeaders: headers,
       forceNew: true,
-      reconnection: options.reconnection ?? false,
+      reconnection: connectOptions.reconnection ?? false,
       reconnectionDelay: 10,
     });
     clients.push(socket);

@@ -1,15 +1,24 @@
+import { LRUCache } from 'lru-cache';
+import { HOT_ROOM_TTL_S } from '@watchparty/shared';
 import type { RoomCode } from '@watchparty/shared';
 import type { RoomRepository } from '../../application/ports';
 import { DomainError } from '../../domain/DomainError';
 import type { RoomSnapshot } from '../../domain/snapshot';
 import { RoomSnapshotCodec } from './RoomSnapshotCodec';
 
+const MS_PER_SECOND = 1000;
+
 /**
- * Single-instance room store (Strategy: used when REDIS_URL is unset, and in tests).
+ * Process-local room store: the hot tier in front of Postgres, or the whole store in tests.
+ * Rooms idle for HOT_ROOM_TTL_S are evicted (read-through brings them back from the archive).
  * Stores encoded JSON like the Redis store does, so callers can never alias stored state.
  */
 export class InMemoryRoomRepository implements RoomRepository {
-  private readonly rooms = new Map<RoomCode, string>();
+  private readonly rooms: LRUCache<RoomCode, string>;
+
+  constructor(ttlMs: number = HOT_ROOM_TTL_S * MS_PER_SECOND) {
+    this.rooms = new LRUCache({ ttl: ttlMs, ttlAutopurge: true, updateAgeOnGet: true });
+  }
 
   create(snapshot: RoomSnapshot): Promise<void> {
     if (this.rooms.has(snapshot.id)) {
