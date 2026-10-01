@@ -259,7 +259,7 @@ P0 Scaffold ─► P1 Shared Contract ─► P2 Domain ─► P3 Application ─
 - [ ] Participant "request" affordance on controls. Viewer disabled state with tooltip.
 - [ ] `RemovedPage`, `NotFoundPage`, join skeletons
 
-**Exit Criteria** (manual, 3 browsers: host / moderator / participant)
+**Exit Criteria** (automated in `e2e/roles.spec.ts`: 3 browsers, host / moderator / participant; stable across repeated runs)
 - Every row of the permission matrix behaves in the UI exactly as on the server. No control is clickable that the server would reject.
 - The full request → approve → everyone switches flow works. Reject and expiry both toast correctly.
 

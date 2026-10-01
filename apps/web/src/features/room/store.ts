@@ -32,6 +32,8 @@ export interface RoomData {
   readonly playback: PlaybackView | null;
   readonly queue: readonly QueueItemView[];
   readonly requests: readonly RequestView[];
+  /** Ids of requests this user sent and is still waiting on. */
+  readonly myRequests: readonly string[];
   readonly chat: readonly ChatEntry[];
 }
 
@@ -46,6 +48,8 @@ export interface RoomActions {
   setQueue(queue: readonly QueueItemView[]): void;
   addRequest(request: RequestView): void;
   removeRequest(requestId: string): void;
+  trackMyRequest(requestId: string): void;
+  untrackMyRequest(requestId: string): void;
   addChat(message: ChatMessageView): void;
   addSystem(text: string, at: number): void;
 }
@@ -65,6 +69,7 @@ const INITIAL: RoomData = {
   playback: null,
   queue: [],
   requests: [],
+  myRequests: [],
   chat: [],
 };
 
@@ -120,6 +125,12 @@ export const createRoomStore = (): RoomStore =>
     },
     removeRequest: (requestId) => {
       set((s) => ({ requests: s.requests.filter((r) => r.id !== requestId) }));
+    },
+    trackMyRequest: (requestId) => {
+      set((s) => (s.myRequests.includes(requestId) ? s : { myRequests: [...s.myRequests, requestId] }));
+    },
+    untrackMyRequest: (requestId) => {
+      set((s) => ({ myRequests: s.myRequests.filter((id) => id !== requestId) }));
     },
     addChat: (message) => {
       set((s) =>

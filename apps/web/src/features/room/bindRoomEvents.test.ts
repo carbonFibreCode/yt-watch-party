@@ -117,6 +117,27 @@ describe('bindRoomEvents', () => {
     expect(s.status).toBe('kicked');
   });
 
+  it('tells the requester how their request was resolved, and only them', () => {
+    const { socket, store, notes } = setup();
+    store.getState().trackMyRequest('mine-1');
+    store.getState().trackMyRequest('mine-2');
+    store.getState().trackMyRequest('mine-3');
+    socket.serverEmit('request_resolved', { requestId: 'mine-1', status: 'approved', resolvedBy: 'host' });
+    socket.serverEmit('request_resolved', { requestId: 'mine-2', status: 'rejected' });
+    socket.serverEmit('request_resolved', { requestId: 'mine-3', status: 'expired' });
+    socket.serverEmit('request_resolved', {
+      requestId: 'someone-else',
+      status: 'approved',
+      resolvedBy: 'host',
+    });
+    expect(notes).toEqual([
+      'success:host approved your request.',
+      'warning:The host declined your request.',
+      'info:Your request expired before anyone answered it.',
+    ]);
+    expect(store.getState().myRequests).toEqual([]);
+  });
+
   it('removes every listener on unbind', () => {
     const { socket, unbind } = setup();
     expect(socket.listenerCount()).toBe(12);

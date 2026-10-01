@@ -50,7 +50,8 @@ export function ControlBar({ command, duration }: ControlBarProps): ReactElement
         min={0}
         max={Math.max(duration ?? 0, 1)}
         step={1}
-        value={[Math.min(shown, duration ?? shown)]}
+        // Until the length is known the track stays empty rather than looking finished.
+        value={[duration === null ? 0 : Math.min(shown, duration)]}
         disabled={disabled || duration === null}
         onValueChange={([value]) => {
           setScrubbing(value ?? null);

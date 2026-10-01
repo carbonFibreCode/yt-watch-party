@@ -13,7 +13,7 @@ test.describe('rooms in two browsers', () => {
     await host.getByRole('button', { name: 'Create room' }).click();
     await expect(host).toHaveURL(/\/r\/[23456789A-Z]{6}$/);
     await expect(host.getByRole('heading', { name: 'E2E movie night' })).toBeVisible();
-    const people = host.getByRole('complementary', { name: 'Room sidebar' });
+    const people = host.getByRole('list', { name: 'People in the room' });
     await expect(people.getByText('Hana (you)')).toBeVisible();
     await expect(people.getByText('Host')).toBeVisible();
 
@@ -22,12 +22,12 @@ test.describe('rooms in two browsers', () => {
     await expect(guest.getByText('Hosted by Hana')).toBeVisible();
     await guest.getByLabel('Your name').fill('Sam');
     await guest.getByRole('button', { name: 'Join the party' }).click();
-    const guestPeople = guest.getByRole('complementary', { name: 'Room sidebar' });
+    const guestPeople = guest.getByRole('list', { name: 'People in the room' });
     await expect(guestPeople.getByText('Sam (you)')).toBeVisible();
     await expect(guestPeople.getByText('Hana')).toBeVisible();
 
     await expect(people.getByText('Sam')).toBeVisible();
-    await expect(people.getByText('People · 2')).toBeVisible();
+    await expect(host.getByRole('tab', { name: /People\s*2/ })).toBeVisible();
 
     await guest.context().close();
     await expect(people.getByText('Reconnecting…')).toBeVisible();
