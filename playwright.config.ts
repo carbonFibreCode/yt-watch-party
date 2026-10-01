@@ -18,6 +18,8 @@ export default defineConfig({
     baseURL: WEB_URL,
     trace: 'retain-on-failure',
     ...devices['Desktop Chrome'],
+    // Real YouTube playback without a click; the muted/blocked fallbacks are covered by unit tests.
+    launchOptions: { args: ['--autoplay-policy=no-user-gesture-required'] },
   },
   webServer: [
     {

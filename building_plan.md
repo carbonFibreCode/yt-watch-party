@@ -237,7 +237,7 @@ P0 Scaffold ─► P1 Shared Contract ─► P2 Domain ─► P3 Application ─
 - Video change → `load(id, expectedPos, autoplay)`
 - Autoplay-blocked detection → status. Post-seek cooldown respected.
 
-**Exit Criteria** (manual, written down in the phase notes)
+**Exit Criteria** (automated in `e2e/sync.spec.ts` against real YouTube in two browsers; run 4× without flakes)
 - Two tabs plus one incognito: play, pause, seek, and change video propagate in < 300ms on localhost
 - Drift stays < 1s over 3 minutes
 - Throttle one tab (DevTools "Slow 3G") → it reconverges within one `DRIFT_CHECK_MS`
