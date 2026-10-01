@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { RoomName, VideoUrl } from './primitives';
 import type { AckError } from '../errors';
+import { RoomName, VideoUrl } from './primitives';
 import type { Role, RoomCode } from './primitives';
 import type { VideoView } from './views';
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { CAPABILITIES, PermissionPolicy } from './permissions';
 import type { Role } from './contract/primitives';
+import { CAPABILITIES, PermissionPolicy } from './permissions';
 import type { Capability } from './permissions';
 
 /**

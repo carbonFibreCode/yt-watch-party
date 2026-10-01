@@ -69,7 +69,9 @@ export default defineConfig(
       'import-x/order': [
         'error',
         {
-          groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index', 'type'],
+          groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],
+          pathGroups: [{ pattern: '@watchparty/**', group: 'internal' }],
+          pathGroupsExcludedImportTypes: ['builtin'],
           alphabetize: { order: 'asc', caseInsensitive: true },
         },
       ],
@@ -137,6 +139,24 @@ export default defineConfig(
     rules: {
       '@typescript-eslint/no-non-null-assertion': 'off',
       '@typescript-eslint/explicit-module-boundary-types': 'off',
+    },
+  },
+
+  // ---------- domain tests may additionally import the test runner ----------
+  {
+    files: ['apps/server/src/domain/**/*.test.ts', 'apps/server/src/domain/test/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '^(?!@watchparty/shared$|vitest$|\\.{1,2}/)',
+              message: 'domain tests may only import vitest, @watchparty/shared and domain modules.',
+            },
+          ],
+        },
+      ],
     },
   },
 
