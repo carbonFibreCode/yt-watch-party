@@ -1,0 +1,22 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+coverage/
+*.tsbuildinfo
+
+# env
+.env
+.env.*
+!.env.example
+
+# tooling
+.DS_Store
+*.log
+.vite/
+playwright-report/
+test-results/
+
+# problem statement (third-party document, kept local only)
+*.pdf

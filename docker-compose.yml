@@ -1,0 +1,32 @@
+# Local backing services (LLD SP-23). The `scale` profile (2× server + nginx) is added in Phase 12.
+name: watchparty
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: watchparty
+      POSTGRES_PASSWORD: watchparty
+      POSTGRES_DB: watchparty
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U watchparty -d watchparty']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:

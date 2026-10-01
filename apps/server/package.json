@@ -1,0 +1,19 @@
+{
+  "name": "@watchparty/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsdown",
+    "start": "node dist/main.mjs",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@watchparty/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "tsdown": "0.23.0",
+    "tsx": "4.23.15"
+  }
+}
