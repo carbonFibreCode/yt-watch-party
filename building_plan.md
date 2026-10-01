@@ -340,7 +340,7 @@ P0 Scaffold ─► P1 Shared Contract ─► P2 Domain ─► P3 Application ─
 
 **Tasks**
 - [ ] `prom-client` metrics from SP-20, `/metrics` behind `METRICS_TOKEN`. Per-socket child loggers.
-- [ ] Playwright: the 3 E2E scenarios from SP-22
+- [ ] Playwright: the 3 E2E scenarios from SP-22 (Playwright itself and the first two-browser test were pulled forward into P6)
 - [ ] Polish pass: responsive layout, empty states, focus states, a11y (Radix + labels), loading skeletons, favicon/OG meta, light/dark toggle
 - [ ] Remove dead code. Final `pnpm lint` with zero warnings.
 
