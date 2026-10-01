@@ -727,7 +727,7 @@ The dispatch-time `authorize` reads the role outside the transaction, so `RoomCo
 
 **What.**
 - `Broadcaster` port: `publish(roomId: RoomCode, room: Room, events: DomainEvent[]): Promise<void>`.
-- `SocketBroadcaster` implements it using a table of **presenters**, one per domain event type (OCP).
+- `SocketBroadcaster` implements it using a table of **presenters**, one per domain event type (OCP). `DomainEvent<K>` is a distributed mapped type, so `presenters[event.type](event)` type-checks (correlated unions), and the table must cover every event type. State events (`PlaybackChanged`, `QueueChanged`) are sent at most once per batch.
 - Channel naming is centralized in `realtime/channels.ts` (DRY):
 
 ```ts
@@ -745,7 +745,7 @@ export const ch = {
 | `ParticipantJoined` | `user_joined` | `room` | — |
 | `ParticipantLeft` | `user_left` | `room` | — |
 | `PresenceChanged` | `presence_changed` | `room` | — |
-| `ParticipantRemoved` | `participant_removed` → `room`; `kicked` → `user` | — | `io.in(user).socketsLeave(room/staff)`, then `disconnectSockets(true)` after the emit flushes |
+| `ParticipantRemoved` | `kicked` → `user` (first), then `participant_removed` → `room` | — | `io.in(user).socketsLeave([room, staff, user])`. Sockets are **not** disconnected: the client navigates to the "removed" screen and can still join other rooms. Any later command from those sockets is refused `NOT_IN_ROOM` by the membership step |
 | `RoleAssigned` | `role_assigned` | `room` | staff channel sync: `io.in(user).socketsJoin(staff)` if role ≥ moderator, else `socketsLeave(staff)`. Promoted users also receive current pending requests via `action_requested` replay |
 | `HostTransferred` | `host_transferred` | `room` | same staff-channel sync for both users |
 | `PlaybackChanged` | `sync_state` | `room` | — |
@@ -766,13 +766,14 @@ Each presenter calls `RoomPresenter.participants(room)`, so the participants lis
 **What.**
 - `PresenceService` and the `PresenceProbe` port: `countSockets(roomId, userId): Promise<number>`, implemented with `io.in(ch.user(r,u)).fetchSockets()`, which works across instances.
 - Socket.IO **connection state recovery**: blips under `RECOVERY_WINDOW_MS` restore the socket id, its rooms, and missed packets transparently.
+- `Scheduler` port (`schedule(key, delayMs, task)`, `cancelAll()`): `TimerScheduler` uses `setTimeout(...).unref()`, and rescheduling a key replaces its timer. The grace check fires at `GRACE_PERIOD_MS + GRACE_CHECK_SLACK_MS` and is simply `mutate(no-op)`, because the lazy reap inside `mutate` does the work.
 
 **How.**
 
 | Situation | Behavior |
 |---|---|
 | New tab of an already-present user | `join()` is idempotent for an online member: no `user_joined`, the socket just joins the channels |
-| Socket recovered (`socket.recovered === true`) | Nothing to do: rooms and `socket.data` are restored and missed events replayed |
+| Socket recovered (`socket.recovered === true`) | Rooms, `socket.data` and missed events are restored by Socket.IO. `PresenceService.onRecovered` then runs `MembershipService.join` so a user marked *away* during the blip is brought back online. If the user was removed meanwhile, the socket is detached instead. Covered by a real-socket integration test (`engine.close()` → recovered) |
 | A socket disconnects, the user still has others | Nothing (the probe counts more than 0) |
 | The **last** socket of a user disconnects | `room.markAway(userId, now)` → `presence_changed` (row shows "reconnecting…"). Schedule a `GRACE_PERIOD_MS` timer |
 | User reconnects within grace | `join()` sees an existing away member → back online → `presence_changed`. Timer is cancelled |
@@ -1029,7 +1030,7 @@ The table lives in `shared/constants.ts` as `RATE_LIMITS` (one source for the nu
 | `POST /api/rooms` | session | `{ name?: string(1..64), videoUrl?: string }` | `201 { roomId }` | Code via `nanoid customAlphabet(ROOM_CODE_ALPHABET, 6)`, retried on unique conflict (max 5). Optional initial video goes through the same `VideoMetadataProvider`. Write-through create |
 | `GET /api/rooms/:code` | session | — | `200 { roomId, name, hostName, participantCount, video: VideoRef \| null }` / `404` | Join-page preview |
 | `GET /api/me/rooms` | session | — | `200 RoomSummary[]` (≤ 10) | "Recent rooms" from `room_memberships` |
-| `GET /api/health` | — | — | `200 { status, db, redis, uptime }` | Render health check |
+| `GET /api/health` | — | — | `200 { status: 'ok', checks: { [dependency]: boolean }, uptimeS }`, or `503` with `status: 'degraded'` if any check fails | Render health check. Checks are pluggable `HealthCheck`s registered by the composition root (`db` in P5, `redis` in P12) |
 | `GET /metrics` | basic token | — | Prometheus text | `METRICS_TOKEN` |
 | `GET /*` | — | — | SPA `index.html` | `express.static(web/dist)` + history fallback |
 
@@ -1088,7 +1089,11 @@ Request bodies are validated by the same zod schemas from `shared/contract/http.
 - `wp_cas_attempts` (histogram)
 - `wp_broadcast_events_total{event}`
 
-**Composition root** (`main.ts`). Manual dependency injection, in this order:
+**Composition root** is split in two:
+- `compose.ts` holds pure wiring. It builds every concrete class and returns `{ httpServer, io, rooms, close }` without listening. Integration tests compose the real app with a `FakeClock`, a `ManualScheduler` and a stub metadata provider.
+- `main.ts` is the process entry: load config, compose, listen, handle signals. A listen failure (e.g. `EADDRINUSE`) is logged as fatal and exits 1.
+
+Local env vars load via Node's built-in `--env-file-if-exists=../../.env` (no dotenv dependency). Wiring order:
 
 ```
 config → logger/metrics → pg pool + drizzle → redis? → repositories (Strategy by REDIS_URL, wrapped in Tiered)
@@ -1285,6 +1290,7 @@ sequenceDiagram
 | `UNAUTHENTICATED` | No session on handshake / HTTP | "Please enter a name to continue." |
 | `VALIDATION_FAILED` | zod parse failure | "That request was malformed." |
 | `ROOM_NOT_FOUND` | Unknown code | "This room doesn't exist." |
+| `NOT_FOUND` | Unknown HTTP API route | "Not found." |
 | `NOT_IN_ROOM` | Command before join | "Join the room first." |
 | `FORBIDDEN` | Capability or relational check failed | "You don't have permission to do that." |
 | `BANNED` | Kicked user rejoining | "You were removed from this room." |

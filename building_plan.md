@@ -155,7 +155,7 @@ P0 Scaffold ─► P1 Shared Contract ─► P2 Domain ─► P3 Application ─
 **Goal:** a running Express + Socket.IO server (in-memory strategies) that real socket clients can drive.
 
 **Tasks**
-- [ ] `config.ts` (zod env), `logger.ts` (pino), minimal `metrics.ts` stubs
+- [ ] `config.ts` (zod env), `logger.ts` (pino). Metrics are added in P13; no stubs before then (rules.md §0.4)
 - [ ] `http/app.ts` (helmet with the CSP from SP-17, pino-http, `/api/health`, SPA static + fallback)
 - [ ] `realtime/channels.ts`, `SocketGateway` (auth middleware via `SessionResolver`, origin check, `maxHttpBufferSize`, `connectionStateRecovery`, bind pipeline), `SocketBroadcaster` (presenter table from SP-8, staff channel sync, kick/disconnect), `SocketPresenceProbe`
 - [ ] `PresenceService`: base version (markAway/markOnline + grace timer). The full edge-case matrix comes in P10.
@@ -185,7 +185,7 @@ P0 Scaffold ─► P1 Shared Contract ─► P2 Domain ─► P3 Application ─
 - [ ] `BetterAuthSessionResolver`. Mount `toNodeHandler(auth)` at `/api/auth/*` **before** `express.json()`.
 - [ ] `PostgresRoomRepository`, `TieredRoomRepository` (read-through, write-through create, write-behind), `SnapshotFlusher` (+ flush on SIGTERM)
 - [ ] `PgChatRepository`, `PgMembershipRepository` (+ `reassign` for account linking)
-- [ ] `OEmbedMetadataProvider` (+ `lru-cache`, timeout, graceful degrade)
+- [x] `OEmbedMetadataProvider` (+ `lru-cache`, timeout, graceful degrade). *Pulled forward into P4: `change_video` needs it to work at all, and stubs are not allowed in production code*
 - [ ] Routes: `POST /api/rooms`, `GET /api/rooms/:code`, `GET /api/me/rooms` (zod-validated, one error shape)
 
 **Tests**

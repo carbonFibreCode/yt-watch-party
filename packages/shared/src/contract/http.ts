@@ -33,8 +33,8 @@ export interface RoomSummary {
 
 export interface HealthResponse {
   readonly status: 'ok' | 'degraded';
-  readonly db: boolean;
-  readonly redis: boolean | null;
+  /** One entry per configured dependency (e.g. `db`, `redis`); true when reachable. */
+  readonly checks: Readonly<Record<string, boolean>>;
   readonly uptimeS: number;
 }
 

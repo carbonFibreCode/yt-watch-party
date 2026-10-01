@@ -171,3 +171,24 @@ export const authUser = (userId: string, name: string = userId): AuthUser => ({
   name,
   isAnonymous: true,
 });
+
+/** Scheduler whose tasks run only when the test says so. */
+export class ManualScheduler {
+  readonly tasks = new Map<string, { delayMs: number; task: () => Promise<void> }>();
+
+  schedule(key: string, delayMs: number, task: () => Promise<void>): void {
+    this.tasks.set(key, { delayMs, task });
+  }
+
+  cancelAll(): void {
+    this.tasks.clear();
+  }
+
+  async runAll(): Promise<void> {
+    const tasks = [...this.tasks.values()];
+    this.tasks.clear();
+    for (const { task } of tasks) {
+      await task();
+    }
+  }
+}
