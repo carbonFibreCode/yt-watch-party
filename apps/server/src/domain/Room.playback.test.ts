@@ -48,6 +48,13 @@ describe('Room playback', () => {
     expect(room.playback.playState).toBe('playing');
   });
 
+  it('cues a video paused at the offset', () => {
+    const room = hostedRoom();
+    room.cueVideo(FIRST, 15, T0);
+    expect(room.playback).toMatchObject({ video: FIRST, isPlaying: false, anchorPosition: 15 });
+    expect(room.pullEvents()).toEqual([{ type: 'PlaybackChanged' }]);
+  });
+
   it('records duration without broadcasting', () => {
     const room = hostedRoom();
     room.changeVideo(FIRST, 0, T0);

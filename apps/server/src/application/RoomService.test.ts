@@ -45,6 +45,17 @@ describe('RoomService', () => {
       expect((await repository.load('K7M2QX'))?.hostId).toBe(HOST.userId);
     });
 
+    it('cues an initial video paused', async () => {
+      const { service, repository } = setup(undefined, ['K7M2QX']);
+      const video = { id: 'dQw4w9WgXcQ', title: 'T', thumbnailUrl: 'x' };
+      await service.create('Movie night', HOST, { video, startAt: 12 });
+      expect((await repository.load('K7M2QX'))?.playback).toMatchObject({
+        video,
+        isPlaying: false,
+        anchorPosition: 12,
+      });
+    });
+
     it('retries with a new code on collision', async () => {
       const { service } = setup(undefined, ['AAAAAA', 'AAAAAA', 'BBBBBB']);
       await service.create('First', HOST);

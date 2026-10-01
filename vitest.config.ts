@@ -4,7 +4,7 @@ const FULL = { lines: 100, functions: 100, branches: 100, statements: 100 };
 
 export default defineConfig({
   test: {
-    projects: ['packages/*', 'apps/*'],
+    projects: ['packages/*', 'apps/web', 'apps/server/vitest.config.ts', 'apps/server/vitest.db.config.ts'],
     passWithNoTests: true,
     coverage: {
       provider: 'v8',

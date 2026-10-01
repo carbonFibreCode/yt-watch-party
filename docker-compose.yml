@@ -9,7 +9,8 @@ services:
       POSTGRES_PASSWORD: watchparty
       POSTGRES_DB: watchparty
     ports:
-      - '5432:5432'
+      # Host port 5433 avoids clashing with a locally installed Postgres on 5432.
+      - '${POSTGRES_PORT:-5433}:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -21,7 +22,8 @@ services:
   redis:
     image: redis:7.4-alpine
     ports:
-      - '6379:6379'
+      # Host port 6380 avoids clashing with a locally installed Redis on 6379.
+      - '${REDIS_PORT:-6380}:6379'
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s

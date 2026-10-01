@@ -36,11 +36,18 @@ describe('http app', () => {
     expect(response.headers.get('x-powered-by')).toBeNull();
   });
 
+  it('keeps plain-http development usable: no HSTS or upgrade-insecure-requests outside production', async () => {
+    server = await startServer();
+    const response = await fetch(`${server.url}/api/health`);
+    expect(response.headers.get('strict-transport-security')).toBeNull();
+    expect(response.headers.get('content-security-policy')).not.toContain('upgrade-insecure-requests');
+  });
+
   it('serves the SPA with a history fallback when a build is present', async () => {
     const dist = mkdtempSync(join(tmpdir(), 'wp-web-'));
     writeFileSync(join(dist, 'index.html'), '<!doctype html><title>Watch Party</title>');
     writeFileSync(join(dist, 'app.js'), 'console.log(1)');
-    server = await startServer(dist);
+    server = await startServer({ webDistDir: dist });
     expect(await (await fetch(`${server.url}/r/K7M2QX`)).text()).toContain('<title>Watch Party</title>');
     expect(await (await fetch(`${server.url}/app.js`)).text()).toBe('console.log(1)');
   });

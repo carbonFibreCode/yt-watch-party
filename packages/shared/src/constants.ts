@@ -68,5 +68,12 @@ export const OEMBED_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 export const OEMBED_NEGATIVE_TTL_MS = 10 * 60 * 1000;
 export const VIDEO_FALLBACK_TITLE = 'YouTube video';
 
+// ---------- persistence & auth ----------
+export const DB_POOL_MAX = 10;
+export const RECENT_ROOMS_LIMIT = 10;
+export const AUTH_COOKIE_CACHE_S = 300;
+export const MIN_PASSWORD_LENGTH = 8;
+export const MAX_PASSWORD_LENGTH = 128;
+
 // ---------- process ----------
 export const SHUTDOWN_TIMEOUT_MS = 10_000;

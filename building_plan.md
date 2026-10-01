@@ -180,7 +180,7 @@ P0 Scaffold ─► P1 Shared Contract ─► P2 Domain ─► P3 Application ─
 **Goal:** real users (better-auth), real Postgres, durable rooms, and the REST API.
 
 **Tasks**
-- [ ] Drizzle setup (`pg` Pool), `schema.ts` (`rooms`, `room_memberships`, `chat_messages`) plus better-auth tables via `@better-auth/cli generate`, `drizzle-kit` migrations, `db:migrate` script
+- [ ] Drizzle setup (`pg` Pool), `schema.ts` (`rooms`, `room_memberships`, `chat_messages`) plus the better-auth tables (matched to `getAuthTables` of the pinned version, guarded by a drift test), `drizzle-kit` migrations applied at boot under an advisory lock
 - [ ] better-auth instance: `emailAndPassword`, `anonymous({ onLinkAccount })`, Drizzle adapter, `cookieCache`
 - [ ] `BetterAuthSessionResolver`. Mount `toNodeHandler(auth)` at `/api/auth/*` **before** `express.json()`.
 - [ ] `PostgresRoomRepository`, `TieredRoomRepository` (read-through, write-through create, write-behind), `SnapshotFlusher` (+ flush on SIGTERM)
@@ -353,7 +353,7 @@ P0 Scaffold ─► P1 Shared Contract ─► P2 Domain ─► P3 Application ─
 ## P14 · Docs & Release
 
 **Tasks**
-- [ ] `README.md`: live URL, feature list, screenshots/GIF, quick start (`docker compose up -d && pnpm i && pnpm db:migrate && pnpm dev`), env table, deployment notes, scaling results, trade-offs, known limitations
+- [ ] `README.md`: live URL, feature list, screenshots/GIF, quick start (`docker compose up -d && pnpm i && cp .env.example .env && pnpm dev`), env table, deployment notes, scaling results, trade-offs, known limitations
 - [ ] `docs/ARCHITECTURE.md`: condensed from LLD (diagram, WebSocket flow, sync algorithm, RBAC, scaling)
 - [ ] `docs/WALKTHROUGH.md`: talking points per library and per design decision (the brief's "Code Understanding" section)
 - [ ] 2–3 min demo video (host / mod / participant split screen)
