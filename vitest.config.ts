@@ -13,6 +13,7 @@ export default defineConfig({
       // Coverage floors (rules.md §10.2).
       thresholds: {
         'packages/shared/src/{permissions,playback,youtube,errors}.ts': FULL,
+        'apps/server/src/domain/**/*.ts': { lines: 95, functions: 95, branches: 90, statements: 95 },
       },
     },
   },

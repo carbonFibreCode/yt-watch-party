@@ -453,17 +453,16 @@ class Room {
     private _version: number, private readonly pending: DomainEvent[] = [],
   ) {}
 
-  static create(p: { id: RoomCode; name: string; host: AuthUser; initialVideo?: VideoRef; now: number }): Room;
+  static create(p: { id: RoomCode; name: string; host: UserRef; now: number }): Room; // creator admitted as host, *away* until their socket joins
   static fromSnapshot(s: RoomSnapshot): Room;
   toSnapshot(): RoomSnapshot;
   get version(): number;
   pullEvents(): DomainEvent[];                 // drains `pending`
 
   // membership: all take `now` (injected Clock; the domain never reads time)
-  join(user: AuthUser, now: number): Participant;            // BANNED, ROOM_FULL; restores remembered role
+  join(user: UserRef, now: number): JoinResult;              // {participant, isNew}; BANNED, ROOM_FULL; existing member → back online (no joined event)
   markAway(userId: UserId, now: number): void;               // emits PresenceChanged
-  markOnline(userId: UserId): void;
-  leave(userId: UserId, now: number): void;                  // emits ParticipantLeft (+ succession if host)
+  leave(userId: UserId): void;                               // emits ParticipantLeft (+ succession if host)
   reapAway(now: number): void;                               // removes members away > GRACE_PERIOD_MS
   remove(actorId: UserId, targetId: UserId): void;           // canActOn, bans target
   assignRole(actorId: UserId, targetId: UserId, role: AssignableRole): void;
@@ -471,16 +470,16 @@ class Room {
 
   // playback: authorization already done by the pipeline
   play(now: number): void;  pause(now: number): void;  seek(t: number, now: number): void;
-  changeVideo(video: VideoRef, now: number): void;
+  changeVideo(video: VideoRef, startAt: number, now: number): void;   // startAt from the URL's t= (SP-11)
   reportDuration(videoId: VideoId, duration: number): void;  // first report wins, ignored on mismatch
   videoEnded(videoId: VideoId, rev: number, now: number): void; // idempotent; advances queue
 
   // queue
-  enqueue(video: VideoRef, addedBy: UserId, id: string): void;
+  enqueue(item: QueueItem, now: number): void;               // idle room → starts the video instead of queueing
   dequeue(itemId: string): void;
 
   // requests (SP-10)
-  createRequest(actorId: UserId, action: PreparedAction, id: string, now: number): ActionRequest;
+  createRequest(requesterId: UserId, action: RequestedAction, id: string, now: number): ActionRequest;
   resolveRequest(actorId: UserId, requestId: string, approve: boolean, now: number): ActionRequest;
   expireRequests(now: number): void;
 }
@@ -490,7 +489,7 @@ class Room {
 1. Exactly one participant has role `host`, and `hostId` matches it. This holds whenever the room has at least one member.
 2. A banned user can never `join`.
 3. `participants.size ≤ ROOM_CAPACITY`.
-4. `PlaybackState.rev` strictly increases on every playback change.
+4. `PlaybackState.rev` strictly increases on every playback change. This is guaranteed by construction (every transition is `rev + 1` or returns `this`) and covered by tests, not by a runtime check.
 5. Each user has at most `MAX_PENDING_REQUESTS_PER_USER` pending requests. A new request of the same `type` replaces the user's older one.
 
 **Domain events** (`events.ts`): a discriminated union, appended by methods and drained by `RoomService`.
@@ -500,7 +499,7 @@ type DomainEvent =
   | { type: 'ParticipantJoined'; userId; name; role }
   | { type: 'ParticipantLeft'; userId; name; reason: 'left' | 'timeout' }
   | { type: 'PresenceChanged'; userId; presence }
-  | { type: 'ParticipantRemoved'; userId; byRole: Role }
+  | { type: 'ParticipantRemoved'; userId; name; byRole: Role }
   | { type: 'RoleAssigned'; userId; name; role; previousRole }
   | { type: 'HostTransferred'; fromUserId; toUserId; reason: 'manual' | 'succession' }
   | { type: 'PlaybackChanged' }                           // presenter reads current playback
@@ -509,7 +508,11 @@ type DomainEvent =
   | { type: 'RequestResolved'; requestId; requesterId; status: 'approved' | 'rejected' | 'expired'; resolvedBy?: UserId };
 ```
 
-**Host succession algorithm** (`MemberRegistry.pickSuccessor()`): among *online* members excluding the departing host, take the highest `ROLE_RANK`, breaking ties by earliest `joinedAt`. If nobody is online, the room keeps `hostId`, and the first person to rejoin becomes host via `join()` (rule: a hostless room makes the next joiner host). Pure, deterministic, unit-tested.
+**Host succession algorithm** (`MemberRegistry.pickSuccessor()`): among remaining members, order **online before away**, then highest `ROLE_RANK`, then earliest `joinedAt`, and take the first. Members that time out together are reaped as a batch *before* succession runs, so a member who is also being reaped is never picked. If the room becomes empty, it has no host member; `join()` makes the next joiner host (**hostless room → newcomer hosts**). A returning ex-host whose role was handed on comes back as moderator (role memory). Pure, deterministic, unit-tested.
+
+**Creator bootstrap:** `Room.create` admits the creator as host with presence *away*. Their socket's `join` brings them online. If they never connect, the normal grace/succession path hands the room to whoever is there. No special case is needed.
+
+**Request cleanup:** a member's pending requests are dropped (announced as `RequestResolved(expired)`) when they leave, are removed, become host, or get a role that can't create requests.
 
 ---
 
@@ -747,7 +750,7 @@ Each presenter calls `RoomPresenter.participants(room)`, so the participants lis
 | Socket recovered (`socket.recovered === true`) | Nothing to do: rooms and `socket.data` are restored and missed events replayed |
 | A socket disconnects, the user still has others | Nothing (the probe counts more than 0) |
 | The **last** socket of a user disconnects | `room.markAway(userId, now)` → `presence_changed` (row shows "reconnecting…"). Schedule a `GRACE_PERIOD_MS` timer |
-| User reconnects within grace | `join()` → `markOnline` → `presence_changed`. Timer is cancelled |
+| User reconnects within grace | `join()` sees an existing away member → back online → `presence_changed`. Timer is cancelled |
 | Grace timer fires | `mutate(room => room.reapAway(now))`. Removes members still away past the deadline → `user_left (reason: timeout)`. If one of them was host → `HostTransferred(succession)` |
 | Instance crashes before its timer fires | **Lazy reaping:** every `mutate` calls `reapAway(now)` first, so the next action in that room reconciles. Correctness never depends on the timer |
 | Explicit `leave_room` / tab close (`pagehide` → emit) | Immediate `leave()`, no grace |
@@ -777,17 +780,22 @@ export const RequestableAction = z.discriminatedUnion('type', [
 ]);
 
 // domain
-type ActionRequest = { id; requesterId; requesterName; action: PreparedAction; createdAt; expiresAt; status: 'pending' };
-type PreparedAction = { type: RequestableAction['type']; payload: ClientPayload<any>; prepared: unknown };
+type ActionRequest = { id; requester: UserRef; action: RequestedAction; createdAt; expiresAt };
+// The *prepared* form: URLs already resolved to embeddable videos, so approval needs no I/O.
+type RequestedAction =
+  | { type: 'play' } | { type: 'pause' } | { type: 'seek'; time: number }
+  | { type: 'change_video'; video: VideoRef; startAt: number } | { type: 'queue_add'; video: VideoRef };
+// A compile-time assertion keeps RequestedAction['type'] identical to the contract's RequestableActionType.
 ```
 
 **How.**
 1. `request_action` (capability `request.create`):
-   - `prepare` delegates to the **target handler's** `prepare`. For `change_video`, the URL is parsed and checked for embeddability *now*, so the requester gets immediate feedback.
+   - `prepare` delegates to the **target handler's** `prepare`, which returns that action's `RequestedAction` branch. For `change_video`, the URL is parsed and checked for embeddability *now*, so the requester gets immediate feedback.
+   - Every requestable handler's `prepare` returns its `RequestedAction` branch, and its `execute` consumes only that prepared value. That makes "execute directly" and "execute after approval" literally the same call.
    - `execute` → `room.createRequest(...)` → `RequestCreated` → staff see an `action_requested` toast with Approve/Reject and a countdown.
 2. `resolve_request` (capability `request.resolve`), inside a single `mutate`:
    - `room.resolveRequest(actor, id, approve, now)` validates that the request is pending and not expired (`REQUEST_EXPIRED`).
-   - If approved, `registry.get(req.action.type).execute(room, approverAsActor, req.action, ctx)` runs. This is **the exact same handler** a moderator triggers directly, and permission is evaluated against the approver.
+   - If approved, `registry.get(req.action.type).execute(room, approverAsActor, { prepared: req.action }, ctx)` runs. This is **the exact same handler** a moderator triggers directly, and permission is evaluated against the approver.
    - Both changes commit atomically in one CAS.
    - Events: `RequestResolved` (requester gets a "approved by Alex" / "rejected" toast) and e.g. `PlaybackChanged`.
 3. **Expiry.** `expiresAt = now + REQUEST_TTL_MS`.

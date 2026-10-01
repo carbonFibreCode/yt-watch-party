@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { projectPosition, timelineFromView } from './playback';
 import type { PlaybackView } from './contract/views';
+import { projectPosition, timelineFromView } from './playback';
 import type { PlaybackTimeline } from './playback';
 
 const timeline = (overrides: Partial<PlaybackTimeline> = {}): PlaybackTimeline => ({
