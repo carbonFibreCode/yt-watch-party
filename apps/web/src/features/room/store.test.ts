@@ -58,6 +58,15 @@ describe('room store', () => {
     expect(store.getState().requests.map((r) => r.id)).toEqual(['r2']);
   });
 
+  it("tracks the user's own pending requests", () => {
+    const store = createRoomStore();
+    store.getState().trackMyRequest('r1');
+    store.getState().trackMyRequest('r1');
+    store.getState().trackMyRequest('r2');
+    store.getState().untrackMyRequest('r1');
+    expect(store.getState().myRequests).toEqual(['r2']);
+  });
+
   it('ignores duplicate chat messages and caps the history', () => {
     const store = createRoomStore();
     const message = {

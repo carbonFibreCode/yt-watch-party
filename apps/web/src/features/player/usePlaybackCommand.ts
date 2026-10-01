@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { toastNotifier } from '@/features/room/notifier';
-import { useRpc } from '@/features/room/RoomContext';
+import { useRoomStore, useRpc } from '@/features/room/RoomContext';
 import { useCan } from '@/features/room/useCan';
 import { RpcError } from '@/lib/rpc';
 import type { RequestableAction } from '@watchparty/shared';
@@ -25,6 +25,7 @@ export interface PlaybackCommand {
 /** The single entry point for every playback control, so all controls behave identically per role. */
 export const usePlaybackCommand = (): PlaybackCommand => {
   const rpc = useRpc();
+  const store = useRoomStore();
   const canControl = useCan('playback.control');
   const canRequest = useCan('request.create');
   const mode: ControlMode = canControl ? 'direct' : canRequest ? 'request' : 'none';
@@ -36,7 +37,8 @@ export const usePlaybackCommand = (): PlaybackCommand => {
           return false;
         }
         if (mode === 'request') {
-          await rpc('request_action', { action });
+          const { requestId } = await rpc('request_action', { action });
+          store.getState().trackMyRequest(requestId);
           toastNotifier.success(`Asked the host for a ${REQUEST_LABEL[action.type]}.`);
           return true;
         }
@@ -65,7 +67,7 @@ export const usePlaybackCommand = (): PlaybackCommand => {
         throw error;
       }
     },
-    [mode, rpc],
+    [mode, rpc, store],
   );
 
   return { mode, send };

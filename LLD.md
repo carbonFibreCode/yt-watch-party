@@ -842,9 +842,15 @@ type RequestedAction =
    - Eager: each instance runs one `REQUEST_SWEEP_MS` interval over rooms with pending requests created there, so expiry toasts appear on time.
 4. **Abuse limits.** At most `MAX_PENDING_REQUESTS_PER_USER` per user. Same-type requests replace older ones (a new seek replaces the previous seek). Rate limit as in §SP-17.
 5. **UI.**
-   - Participants see the same control bar. Buttons show a "request" affordance (hand icon + tooltip "Ask host to pause").
-   - Viewers see disabled controls.
-   - Staff get a badge on the Requests tab plus toasts.
+   - Participants see the same control bar. Buttons show a "request" affordance (hand icon, `aria-label` "Ask to pause", tooltip noting that staff approve). The link form's button reads "Request video", so every control has a distinct accessible name.
+   - Viewers see disabled controls with a tooltip explaining why.
+   - **Staff:**
+     - A **Requests** tab with a live count badge. `RequestCard` shows the requester, the action in plain words (`describeAction`: "jump to 1:23", "play “Title”"), a live countdown (`useSecondsLeft` on the synced clock), and Approve/Reject.
+     - A toast with **Approve/Reject buttons** for each new request from someone else (`useRequestToasts`, keyed by request id). It's dismissed as soon as anyone resolves the request or it expires.
+     - The card and the toast share `useResolveRequest` (DRY).
+   - **Requester:**
+     - The client remembers the ids of its own pending requests (`myRequests`, recorded from the `request_action` ack).
+     - On `request_resolved` it toasts "Mo approved your request.", "Hana declined your request." or "Your request expired…". Other staff only see the card disappear.
 
 ---
 
@@ -1179,9 +1185,11 @@ config → logger/metrics → pg pool + drizzle → redis? → repositories (Str
 │   │   ├─ ControlBar    PlayPause · Scrubber(+ReactionMarkers) · TimeLabel · VideoUrlInput · ReactionBar
 │   │   │                (each control: useCan → enabled | "request" mode | disabled+tooltip)
 │   │   └─ NowPlaying    title · thumbnail
-│   └─ Sidebar (Tabs; bottom Sheet on < md)
-│       ├─ ParticipantList → ParticipantRow (avatar initials, name, RoleBadge, presence dot, "you")
-│       │                    └─ MemberActionsMenu (DropdownMenu; items filtered by PermissionPolicy.canActOn)
+│   └─ RoomSidebar (Tabs: People · Requests [staff] · Chat · Queue [P11]; stacks under the player below lg)
+│       ├─ ParticipantList → ParticipantRow (avatar initials, name, RoleBadge with icon, presence dot, "you")
+│       │                    └─ MemberActionsMenu: items from pure memberActions(self, target), built on
+│       │                       PermissionPolicy (host: make moderator/participant/viewer, make host [online
+│       │                       targets, confirm], remove [confirm]; moderator: remove participants/viewers)
 │       ├─ ChatPanel       MessageList (virtualized not needed ≤ 200 msgs) · Composer
 │       ├─ QueuePanel      QueueList · AddToQueueForm
 │       └─ RequestsPanel   (staff only; badge count) RequestCard(Approve/Reject, countdown)

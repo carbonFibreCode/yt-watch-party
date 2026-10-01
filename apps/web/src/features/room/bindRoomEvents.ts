@@ -64,8 +64,20 @@ export const bindRoomEvents = (
     action_requested: (request) => {
       state().addRequest(request);
     },
-    request_resolved: ({ requestId }) => {
+    request_resolved: ({ requestId, status, resolvedBy }) => {
       state().removeRequest(requestId);
+      if (!state().myRequests.includes(requestId)) {
+        return;
+      }
+      state().untrackMyRequest(requestId);
+      const by = resolvedBy === undefined ? 'The host' : nameOf(resolvedBy);
+      if (status === 'approved') {
+        notify.success(`${by} approved your request.`);
+      } else if (status === 'rejected') {
+        notify.warning(`${by} declined your request.`);
+      } else {
+        notify.info('Your request expired before anyone answered it.');
+      }
     },
     chat_message: (message) => {
       state().addChat(message);

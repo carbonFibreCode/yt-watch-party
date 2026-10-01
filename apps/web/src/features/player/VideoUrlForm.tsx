@@ -47,7 +47,7 @@ export function VideoUrlForm({ command }: { readonly command: PlaybackCommand })
           className="pl-9"
         />
       </div>
-      <ControlHint hint={hintFor(mode, 'Play this video for everyone', 'Ask to play this video')}>
+      <ControlHint hint={hintFor(mode, 'Play this video for everyone', 'Ask the host to play this video')}>
         <Button
           type="submit"
           disabled={!valid || pending}
@@ -55,7 +55,7 @@ export function VideoUrlForm({ command }: { readonly command: PlaybackCommand })
         >
           {mode === 'request' ? (
             <>
-              <Hand /> Ask to play
+              <Hand /> Request video
             </>
           ) : (
             'Play now'
