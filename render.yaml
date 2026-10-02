@@ -5,10 +5,13 @@ services:
     name: watch-party
     runtime: node
     plan: free
-    # Install devDependencies too: the build needs Vite and tsdown even though NODE_ENV=production.
-    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm build
-    # Migrations run at boot under a Postgres advisory lock (apps/server/src/main.ts).
-    startCommand: pnpm start
+    # pnpm runs through Corepack at the version pinned in package.json (`corepack enable` would
+    # write to the read-only /usr/bin). devDependencies are installed because the build needs Vite
+    # and tsdown even though NODE_ENV=production.
+    buildCommand: corepack pnpm install --frozen-lockfile --prod=false && corepack pnpm build
+    # Plain node: the running app needs no package manager. Migrations run at boot under a
+    # Postgres advisory lock (apps/server/src/main.ts).
+    startCommand: node apps/server/dist/main.mjs
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
@@ -16,6 +19,8 @@ services:
         value: production
       - key: LOG_LEVEL
         value: info
+      - key: COREPACK_ENABLE_DOWNLOAD_PROMPT
+        value: '0'
       # The service's public URL, e.g. https://watch-party.onrender.com (also the auth base URL).
       - key: PUBLIC_ORIGIN
         sync: false
