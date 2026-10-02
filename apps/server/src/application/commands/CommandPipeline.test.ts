@@ -121,6 +121,22 @@ describe('CommandPipeline', () => {
     expect(probe.seen).toEqual([{ payload: { emoji: '🔥', videoTime: 3 }, actorId: HOST.userId }]);
   });
 
+  it('reports every outcome to metrics: ok, rejected and failed', async () => {
+    const h = buildHarness();
+    const { sessions } = await h.roomWith(HOST);
+    const host = sessions[0]!;
+    await h.send(host, 'pause', {});
+    await h.send(new FakeSession(GUEST), 'pause', {});
+    await new CommandRegistry(h.pipeline)
+      .register(new ProbeReaction(new Error('boom')))
+      .dispatch('reaction', { emoji: '🔥', videoTime: 3 }, host);
+    expect(h.metrics.commands.map(({ event, outcome }) => [event, outcome])).toEqual([
+      ['pause', 'ok'],
+      ['pause', 'rejected'],
+      ['reaction', 'failed'],
+    ]);
+  });
+
   it('maps unexpected errors to INTERNAL and logs them', async () => {
     const h = buildHarness();
     const { sessions } = await h.roomWith(HOST);

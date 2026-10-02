@@ -43,6 +43,9 @@ services:
         sync: false
       - key: BETTER_AUTH_SECRET
         generateValue: true
+      # Enables GET /metrics for `Authorization: Bearer <token>` (the value is in the dashboard).
+      - key: METRICS_TOKEN
+        generateValue: true
       # Switches every shared-state strategy to Redis (Lua-CAS room store, rate limits, adapter).
       - key: REDIS_URL
         fromService:

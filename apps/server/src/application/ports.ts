@@ -1,5 +1,6 @@
 import type {
   ChatMessageView,
+  ClientEventName,
   RateRule,
   Role,
   RoomCode,
@@ -137,4 +138,14 @@ export interface Logger {
   warn(fields: object, message: string): void;
   error(fields: object, message: string): void;
   child(bindings: object): Logger;
+}
+
+export type CommandOutcome = 'ok' | 'rejected' | 'failed';
+
+/** What the server reports about itself (LLD SP-20): Prometheus in production, nothing in tests. */
+export interface Metrics {
+  commandHandled(event: ClientEventName, outcome: CommandOutcome, durationMs: number): void;
+  /** A room mutation committed after `attempts` compare-and-set tries. */
+  roomCommitted(attempts: number): void;
+  eventBroadcast(event: ServerEventName): void;
 }

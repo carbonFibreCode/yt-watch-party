@@ -14,7 +14,12 @@ export function RoomScreen(): ReactElement {
         <section aria-label="Player" className="min-w-0">
           <PlayerColumn />
         </section>
-        <aside aria-label="Room sidebar" className="grid content-start gap-4">
+        {/* Wide screens: sticky under the header and exactly as tall as the rest of the viewport
+            (header 3.5rem + page padding 2rem), so chat uses the full column. */}
+        <aside
+          aria-label="Room sidebar"
+          className="grid content-start gap-4 lg:sticky lg:top-18 lg:flex lg:h-[calc(100dvh-5.5rem)] lg:flex-col"
+        >
           <RoomSidebar />
         </aside>
       </main>

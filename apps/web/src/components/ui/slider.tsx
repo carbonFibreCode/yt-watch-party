@@ -2,14 +2,21 @@ import { Slider as SliderPrimitive } from 'radix-ui';
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 
+interface SliderProps extends React.ComponentProps<typeof SliderPrimitive.Root> {
+  /** Spoken value per thumb (e.g. "1:23 of 3:45"); defaults to the number. */
+  readonly valueText?: (value: number) => string;
+}
+
 function Slider({
   className,
   defaultValue,
   value,
   min = 0,
   max = 100,
+  valueText,
+  'aria-label': ariaLabel,
   ...props
-}: React.ComponentProps<typeof SliderPrimitive.Root>) {
+}: SliderProps) {
   const _values = React.useMemo(
     () => (Array.isArray(value) ? value : Array.isArray(defaultValue) ? defaultValue : [min, max]),
     [value, defaultValue, min, max],
@@ -46,6 +53,11 @@ function Slider({
         <SliderPrimitive.Thumb
           data-slot="slider-thumb"
           key={index}
+          // Local edit: the thumb carries role="slider", so it needs the accessible name and value.
+          aria-label={ariaLabel}
+          {...(valueText === undefined || _values[index] === undefined
+            ? {}
+            : { 'aria-valuetext': valueText(_values[index]) })}
           className="block size-4 shrink-0 rounded-full border border-primary bg-white shadow-sm ring-ring/50 transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
         />
       ))}

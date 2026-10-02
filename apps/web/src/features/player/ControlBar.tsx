@@ -55,6 +55,9 @@ export function ControlBar({ command, duration }: ControlBarProps): ReactElement
           // Until the length is known the track stays empty rather than looking finished.
           value={[duration === null ? 0 : Math.min(shown, duration)]}
           disabled={disabled || duration === null}
+          valueText={(seconds) =>
+            `${formatDuration(seconds)} of ${duration === null ? 'unknown length' : formatDuration(duration)}`
+          }
           onValueChange={([value]) => {
             setScrubbing(value ?? null);
           }}

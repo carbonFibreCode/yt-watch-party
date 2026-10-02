@@ -1,7 +1,7 @@
 import { ackError, ackOk } from '@watchparty/shared';
 import type { AckData, AckResult, ClientEventName, ErrorCode } from '@watchparty/shared';
 import { DomainError } from '../../domain/DomainError';
-import type { Clock, Logger, RateLimiter, RealtimeSession } from '../ports';
+import type { Clock, CommandOutcome, Logger, Metrics, RateLimiter, RealtimeSession } from '../ports';
 import type { RoomService } from '../RoomService';
 import type { CommandHandler } from './CommandHandler';
 import { authorize } from './middleware/authorize';
@@ -16,6 +16,7 @@ export interface CommandPipelineDeps {
   readonly limiter: RateLimiter;
   readonly clock: Clock;
   readonly logger: Logger;
+  readonly metrics: Metrics;
 }
 
 /**
@@ -39,24 +40,33 @@ export class CommandPipeline {
       const actor = await resolveMembership(this.deps.rooms, handler, session);
       authorize(handler, actor);
       const data = await handler.handle(payload, { session, user: session.user, actor });
-      this.deps.logger.debug({ ...fields, outcome: 'ok', durationMs: this.elapsed(startedAt) }, 'command');
+      const durationMs = this.finish(handler.event, 'ok', startedAt);
+      this.deps.logger.debug({ ...fields, outcome: 'ok', durationMs }, 'command');
       return ackOk(data);
     } catch (error) {
-      return this.reject(error, { ...fields, durationMs: this.elapsed(startedAt) });
+      return this.reject(error, handler.event, fields, startedAt);
     }
   }
 
-  private reject<T>(error: unknown, fields: object): AckResult<T> {
+  private reject<T>(error: unknown, event: ClientEventName, fields: object, startedAt: number): AckResult<T> {
     if (error instanceof DomainError) {
+      const durationMs = this.finish(event, 'rejected', startedAt);
       const level = EXPECTED_REJECTIONS.has(error.code) ? 'warn' : 'debug';
-      this.deps.logger[level]({ ...fields, outcome: 'rejected', errorCode: error.code }, 'command');
+      this.deps.logger[level](
+        { ...fields, outcome: 'rejected', errorCode: error.code, durationMs },
+        'command',
+      );
       return ackError(error.code);
     }
-    this.deps.logger.error({ ...fields, outcome: 'failed', err: error }, 'command failed');
+    const durationMs = this.finish(event, 'failed', startedAt);
+    this.deps.logger.error({ ...fields, outcome: 'failed', err: error, durationMs }, 'command failed');
     return ackError('INTERNAL');
   }
 
-  private elapsed(startedAt: number): number {
-    return this.deps.clock.now() - startedAt;
+  /** Records the outcome once, for logs and metrics alike; returns the duration. */
+  private finish(event: ClientEventName, outcome: CommandOutcome, startedAt: number): number {
+    const durationMs = this.deps.clock.now() - startedAt;
+    this.deps.metrics.commandHandled(event, outcome, durationMs);
+    return durationMs;
   }
 }

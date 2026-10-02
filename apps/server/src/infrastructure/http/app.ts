@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import express, { json, static as serveStatic } from 'express';
@@ -16,6 +17,13 @@ export interface HealthCheck {
   check(): Promise<boolean>;
 }
 
+/** Prometheus scrape endpoint, enabled only when a bearer token is configured. */
+export interface MetricsEndpoint {
+  readonly token: string;
+  readonly contentType: string;
+  render(): Promise<string>;
+}
+
 export interface HttpAppOptions {
   readonly logger: PinoLogger;
   readonly clock: Clock;
@@ -26,6 +34,7 @@ export interface HttpAppOptions {
   /** better-auth's handler; must run before any body parser consumes the request stream. */
   readonly authHandler?: RequestHandler;
   readonly apiRouter?: Router;
+  readonly metrics?: MetricsEndpoint;
   readonly production: boolean;
 }
 
@@ -33,16 +42,27 @@ const MS_PER_SECOND = 1000;
 
 const errorBody = (code: ErrorCode): HttpErrorResponse => ({ error: errorOf(code) });
 
+const digest = (value: string): Buffer => createHash('sha256').update(value).digest();
+
+/** Constant-time comparison (hashing first makes the lengths equal). */
+const sameSecret = (given: string, expected: string): boolean =>
+  timingSafeEqual(digest(given), digest(expected));
+
 /** body-parser errors (bad JSON, too large) carry a 4xx `status`. */
 const isMalformedBody = (error: unknown): boolean =>
   typeof error === 'object' && error !== null && 'type' in error && 'status' in error && error.status === 400;
 
-/** Express app: security headers, request logs, health, API 404s and the SPA (LLD SP-18). */
+/** Express app: security headers, request logs, health, metrics, API 404s and the SPA (LLD SP-18). */
 export const createHttpApp = (options: HttpAppOptions): Express => {
   const app = express();
   app.disable('x-powered-by');
   app.use(securityHeaders(options.production));
-  app.use(pinoHttp({ logger: options.logger, autoLogging: { ignore: (req) => req.url === '/api/health' } }));
+  app.use(
+    pinoHttp({
+      logger: options.logger,
+      autoLogging: { ignore: (req) => req.url === '/api/health' || req.url === '/metrics' },
+    }),
+  );
 
   app.get('/api/health', async (_req, res) => {
     const results = await Promise.all(
@@ -55,6 +75,20 @@ export const createHttpApp = (options: HttpAppOptions): Express => {
       uptimeS: Math.round((options.clock.now() - options.startedAt) / MS_PER_SECOND),
     };
     res.status(body.status === 'ok' ? 200 : 503).json(body);
+  });
+
+  // 404 rather than 401 when disabled, so its existence is not advertised.
+  app.get('/metrics', async (req, res) => {
+    const { metrics } = options;
+    if (metrics === undefined) {
+      res.status(404).json(errorBody('NOT_FOUND'));
+      return;
+    }
+    if (!sameSecret(req.get('authorization') ?? '', `Bearer ${metrics.token}`)) {
+      res.status(HTTP_STATUS.UNAUTHENTICATED).json(errorBody('UNAUTHENTICATED'));
+      return;
+    }
+    res.type(metrics.contentType).send(await metrics.render());
   });
 
   if (options.authHandler !== undefined) {
