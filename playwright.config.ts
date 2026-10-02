@@ -18,6 +18,7 @@ export default defineConfig({
   retries: 0,
   reporter: [['list']],
   // A deployed environment adds real network latency (and free-tier cold starts) to every step.
+  timeout: TARGET_URL !== undefined ? 90_000 : 30_000,
   expect: { timeout: TARGET_URL !== undefined ? 20_000 : 5_000 },
   use: {
     baseURL: TARGET_URL ?? LOCAL_WEB_URL,
