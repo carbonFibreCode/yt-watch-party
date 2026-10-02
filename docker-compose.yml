@@ -1,4 +1,6 @@
-# Local backing services (LLD SP-23). The `scale` profile (2× server + nginx) is added in Phase 12.
+# Local backing services (LLD SP-23): `docker compose up -d`.
+# Scale demo (LLD SP-19): `docker compose --profile scale up -d --build` runs 2 server replicas
+# behind nginx on http://localhost:8080, sharing Postgres and Redis.
 name: watchparty
 
 services:
@@ -29,6 +31,43 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  server:
+    profiles: [scale]
+    build: .
+    deploy:
+      replicas: 2
+    environment:
+      # Plain HTTP on localhost: production-only behavior (HSTS, upgrade-insecure-requests, secure
+      # cookies, per-IP guest sign-in limits) assumes TLS and a public edge, so run as development.
+      NODE_ENV: development
+      PORT: 3000
+      LOG_LEVEL: warn
+      PUBLIC_ORIGIN: http://localhost:8080
+      DATABASE_URL: postgres://watchparty:watchparty@postgres:5432/watchparty
+      REDIS_URL: redis://redis:6379
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-local-scale-demo-secret-do-not-use-in-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:3000/api/health']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  nginx:
+    profiles: [scale]
+    image: nginx:1.29-alpine
+    ports:
+      - '${SCALE_PORT:-8080}:8080'
+    volumes:
+      - ./infra/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      server:
+        condition: service_healthy
 
 volumes:
   pgdata:

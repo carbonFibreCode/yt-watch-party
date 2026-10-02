@@ -11,7 +11,7 @@ export interface RuleConfig {
   readonly duration: number;
 }
 
-/** Builds the limiter for one rule; memory now, Redis-backed in Phase 12 (Strategy). */
+/** Builds the limiter for one rule: in memory, or in Redis when instances share limits (Strategy). */
 export type LimiterFactory = (config: RuleConfig) => RateLimiterAbstract | RateLimiterStoreAbstract;
 
 export const memoryLimiterFactory: LimiterFactory = (config) => new RateLimiterMemory(config);

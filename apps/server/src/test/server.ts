@@ -16,6 +16,7 @@ import type { SessionResolver } from '../application/ports';
 import { FakeClock, ManualScheduler, StubVideoMetadataProvider } from '../application/test/fakes';
 import { composeApp } from '../compose';
 import { StaticSessionResolver, TEST_USER_HEADER } from '../infrastructure/auth/StaticSessionResolver';
+import type { Backplane } from '../infrastructure/backplane';
 import { createMemoryPersistence } from '../infrastructure/persistence';
 import type { Persistence } from '../infrastructure/persistence';
 
@@ -28,6 +29,8 @@ export interface StartOptions {
   readonly webDistDir?: string;
   readonly nodeEnv?: 'test' | 'production';
   readonly persistence?: Persistence;
+  /** Shared fan-out and rate limits, to run several instances against one Redis. */
+  readonly backplane?: Backplane;
   /** Real auth (better-auth) instead of the x-test-user header. */
   readonly auth?: { readonly sessions: SessionResolver; readonly handler: RequestHandler };
 }
@@ -51,6 +54,7 @@ export const startServer = async (options: StartOptions = {}) => {
     logger: pino({ level: 'silent' }),
     sessions: options.auth?.sessions ?? new StaticSessionResolver(),
     persistence: options.persistence ?? createMemoryPersistence(),
+    ...(options.backplane === undefined ? {} : { backplane: options.backplane }),
     ...(options.auth === undefined ? {} : { authHandler: options.auth.handler }),
     clock,
     scheduler,

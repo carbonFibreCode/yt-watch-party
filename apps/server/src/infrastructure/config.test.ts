@@ -16,6 +16,7 @@ describe('loadConfig', () => {
       publicOrigin: 'https://watch.example.com',
       webDistDir: undefined,
       databaseUrl: REQUIRED.DATABASE_URL,
+      redisUrl: undefined,
       auth: {
         secret: REQUIRED.BETTER_AUTH_SECRET,
         baseUrl: 'https://watch.example.com',
@@ -34,14 +35,20 @@ describe('loadConfig', () => {
         WEB_DIST_DIR: '/srv/web',
         BETTER_AUTH_URL: 'https://auth.example.com',
         CLIENT_IP_HEADERS: ' CF-Connecting-IP , x-forwarded-for ',
+        REDIS_URL: 'rediss://default:secret@redis.internal:6379',
       }),
     ).toMatchObject({
       nodeEnv: 'production',
       port: 8080,
       logLevel: 'warn',
       webDistDir: '/srv/web',
+      redisUrl: 'rediss://default:secret@redis.internal:6379',
       auth: { baseUrl: 'https://auth.example.com', clientIpHeaders: ['cf-connecting-ip', 'x-forwarded-for'] },
     });
+  });
+
+  it('only accepts a redis:// or rediss:// REDIS_URL', () => {
+    expect(() => loadConfig({ ...REQUIRED, REDIS_URL: 'http://localhost:6379' })).toThrow(/at REDIS_URL/);
   });
 
   it('rejects a short auth secret', () => {
