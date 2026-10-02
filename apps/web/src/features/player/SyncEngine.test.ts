@@ -86,6 +86,39 @@ describe('SyncEngine', () => {
     expect(events.drifts.at(-1)).toBeCloseTo(-3, 5);
   });
 
+  it('learns the player’s buffering lag and leads later seeks by it, converging on the room', async () => {
+    const { engine, player, state, settle, events } = setup();
+    player.seekLagMs = 800;
+    await engine.apply(state());
+    for (let i = 0; i < 8; i += 1) {
+      await settle();
+    }
+    expect(Math.abs(events.drifts.at(-1) ?? 1)).toBeLessThan(seekThresholdS);
+    const calls = player.calls.length;
+    await settle();
+    await settle();
+    expect(player.calls).toHaveLength(calls);
+  });
+
+  it('ignores outlier measurements (e.g. a very slow first load) when learning', async () => {
+    const { engine, player, state, clock } = setup();
+    player.seekLagMs = 10_000;
+    await engine.apply(state());
+    clock.advance(4_000);
+    await engine.tick();
+    // 4 s behind is an outlier: corrected without learning, so the seek goes to the exact position.
+    expect(player.calls.at(-1)).toBe('seek:4.0');
+  });
+
+  it('does not learn a lead from paused seeks', async () => {
+    const { engine, player, state, settle, clock } = setup();
+    player.seekLagMs = 800;
+    await engine.apply(state({ playState: 'paused', currentTime: 10 }));
+    await settle();
+    await engine.apply(state({ playState: 'paused', currentTime: 50, serverTime: clock.now(), rev: 2 }));
+    expect(player.calls.at(-1)).toBe('seek:50.0');
+  });
+
   it('does not correct again during the post-seek cooldown', async () => {
     const { engine, player, state, settle, clock } = setup();
     await engine.apply(state());
@@ -255,6 +288,15 @@ describe('SyncEngine', () => {
     await player.pause();
     await engine.tick();
     expect(player.state).toBe('playing');
+  });
+
+  it('survives a failed player call and reloads on the next pass', async () => {
+    const { engine, player, state } = setup();
+    player.failNextLoad = true;
+    await expect(engine.apply(state())).resolves.toBeUndefined();
+    await engine.tick();
+    expect(player.calls.filter((c) => c.startsWith('load'))).toHaveLength(2);
+    expect(player.videoId).toBe(VIDEO);
   });
 
   it('stops listening to the player when disposed', () => {

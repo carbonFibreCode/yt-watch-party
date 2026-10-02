@@ -297,6 +297,15 @@ P0 Scaffold ─► P1 Shared Contract ─► P2 Domain ─► P3 Application ─
 
 **Tests:** integration tests for every row of the SP-9 table, plus rate-limit rejection.
 
+**Done.**
+- **Lifecycle tests:** `apps/server/src/test/lifecycle.test.ts` covers host succession by timeout, lazy reaping with no timer, role memory, on-time request expiry, rate limiting over the wire and the oversized-message cut-off. The HTTPS-only production headers are tested too.
+- **Chaos run:** `e2e/chaos.spec.ts` runs it in real browsers.
+- **Found and fixed:**
+  - Players settled about 0.6 s apart → adaptive seek lead (now about 20–100 ms).
+  - A silent drop took about 36 s to detect → 10 s / 5 s heartbeat.
+  - A network drop during player load left it dead forever → call deadlines, engine recovery, reload on `online`.
+  - Request expiry used a polling sweep → precise per-request timers.
+
 **Exit Criteria:** a manual chaos pass (kill wifi for 5s / 30s, close the host tab, open 3 tabs as one user, spam seek) behaves exactly as SP-9 specifies.
 
 **Commit:** `feat: presence grace, host succession, rate limiting, security hardening`

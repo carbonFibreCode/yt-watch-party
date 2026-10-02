@@ -1,8 +1,11 @@
 import {
   AUTOPLAY_DETECT_MS,
   END_TOLERANCE_S,
+  MAX_LEARNABLE_DRIFT_S,
+  MAX_SEEK_LEAD_S,
   POST_SEEK_COOLDOWN_MS,
   projectPosition,
+  SEEK_LEAD_LEARNING_RATE,
   SEEK_THRESHOLD_S,
   timelineFromView,
 } from '@watchparty/shared';
@@ -24,12 +27,14 @@ export interface SyncEngineOutput {
 
 export interface SyncConfig {
   readonly seekThresholdS: number;
+  readonly maxSeekLeadS: number;
   readonly postSeekCooldownMs: number;
   readonly autoplayDetectMs: number;
 }
 
 export const DEFAULT_SYNC_CONFIG: SyncConfig = {
   seekThresholdS: SEEK_THRESHOLD_S,
+  maxSeekLeadS: MAX_SEEK_LEAD_S,
   postSeekCooldownMs: POST_SEEK_COOLDOWN_MS,
   autoplayDetectMs: AUTOPLAY_DETECT_MS,
 };
@@ -45,6 +50,9 @@ const EMBED_ERRORS: ReadonlySet<number> = new Set([100, 101, 150]);
  * - Positions are projected with the synced server clock, so latency does not accumulate.
  * - Small drift is tolerated (seeking causes rebuffering); larger drift is corrected by a seek,
  *   followed by a cooldown so the player can settle.
+ * - A player resumes *behind* where it was sent, by its buffering time. The engine learns that lag
+ *   from the first measurement after each correction and leads later seeks by it, so viewers
+ *   converge on the same frame instead of settling just under the threshold.
  * - Blocked autoplay falls back to muted playback (always allowed), then to a click-to-play gate.
  *
  * Framework-free and fully driven by its inputs, so it is unit-tested with fakes.
@@ -53,6 +61,10 @@ export class SyncEngine {
   private target: PlaybackView | null = null;
   private loadedVideoId: VideoId | null = null;
   private lastSeekAt = Number.NEGATIVE_INFINITY;
+  /** Learned buffering lag (s) added to positions when seeking/loading while playing. */
+  private seekLeadS = 0;
+  /** The next measurement shows how far behind the last playing seek/load landed. */
+  private learnLead = false;
   private playRequestedAt: number | null = null;
   private durationReportedFor: VideoId | null = null;
   private endedReportedRev: number | null = null;
@@ -115,8 +127,16 @@ export class SyncEngine {
 
   /** Serializes reconciliation so concurrent applies/ticks never interleave player calls. */
   private enqueue(work: () => Promise<void>): Promise<void> {
-    this.queue = this.queue.then(work, work);
+    this.queue = this.queue.then(work).catch(() => {
+      this.recover();
+    });
     return this.queue;
+  }
+
+  /** A player call failed: forget what we think the player holds, so the next pass reloads it. */
+  private recover(): void {
+    this.loadedVideoId = null;
+    this.learnLead = false;
   }
 
   private async reconcile(): Promise<void> {
@@ -134,9 +154,10 @@ export class SyncEngine {
     const shouldPlay = target.playState === 'playing';
 
     if (this.loadedVideoId !== target.videoId) {
-      await this.player.load(target.videoId, expected, shouldPlay);
+      await this.player.load(target.videoId, this.seekPosition(expected, shouldPlay), shouldPlay);
       this.loadedVideoId = target.videoId;
       this.lastSeekAt = now;
+      this.learnLead = shouldPlay;
       this.playRequestedAt = shouldPlay ? now : null;
       this.setStatus('loading');
       return;
@@ -155,9 +176,17 @@ export class SyncEngine {
       const actual = await this.player.getCurrentTime();
       const drift = actual - expected;
       this.output.driftMeasured(drift);
+      if (this.learnLead && state === 'playing') {
+        this.learnLead = false;
+        if (Math.abs(drift) <= MAX_LEARNABLE_DRIFT_S) {
+          const lead = this.seekLeadS - drift * SEEK_LEAD_LEARNING_RATE;
+          this.seekLeadS = Math.min(Math.max(lead, 0), this.config.maxSeekLeadS);
+        }
+      }
       if (Math.abs(drift) > this.config.seekThresholdS) {
-        await this.player.seekTo(expected);
+        await this.player.seekTo(this.seekPosition(expected, shouldPlay));
         this.lastSeekAt = now;
+        this.learnLead = shouldPlay;
       }
     }
 
@@ -193,6 +222,11 @@ export class SyncEngine {
     }
     this.playRequestedAt ??= now;
     await this.player.play();
+  }
+
+  /** Where to send the player: ahead by the learned lag while playing, exact while paused. */
+  private seekPosition(expected: number, playing: boolean): number {
+    return playing ? expected + this.seekLeadS : expected;
   }
 
   private onPlayerState(state: PlayerState): void {

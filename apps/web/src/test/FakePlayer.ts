@@ -26,6 +26,11 @@ export class FakePlayer implements VideoPlayer {
   /** Browser refuses even muted play. */
   blockAllAutoplay = false;
   duration = 200;
+  readonly whenReady = Promise.resolve();
+  /** The next `load` call rejects, like a player whose API failed to initialize. */
+  failNextLoad = false;
+  /** Simulated buffering: after a seek/load while playing, the position stays put this long. */
+  seekLagMs = 0;
   readonly calls: string[] = [];
   private anchorPosition = 0;
   private anchorTime: number;
@@ -37,7 +42,7 @@ export class FakePlayer implements VideoPlayer {
   }
 
   private position(): number {
-    const elapsed = this.state === 'playing' ? (this.clock.now() - this.anchorTime) / 1000 : 0;
+    const elapsed = this.state === 'playing' ? Math.max(0, this.clock.now() - this.anchorTime) / 1000 : 0;
     return Math.min(this.anchorPosition + elapsed, this.duration);
   }
 
@@ -61,14 +66,26 @@ export class FakePlayer implements VideoPlayer {
 
   load(videoId: VideoId, startSeconds: number, autoplay: boolean): Promise<void> {
     this.calls.push(`load:${videoId}@${startSeconds.toFixed(1)}:${String(autoplay)}`);
+    if (this.failNextLoad) {
+      this.failNextLoad = false;
+      return Promise.reject(new Error('player unavailable'));
+    }
     this.videoId = videoId;
     this.reanchor(startSeconds);
     if (autoplay) {
       this.tryPlay();
+      this.bufferAfterJump();
     } else {
       this.setState('cued');
     }
     return Promise.resolve();
+  }
+
+  /** While playing, a jump only starts advancing after `seekLagMs` (like a real player buffering). */
+  private bufferAfterJump(): void {
+    if (this.state === 'playing') {
+      this.anchorTime = this.clock.now() + this.seekLagMs;
+    }
   }
 
   play(): Promise<void> {
@@ -86,6 +103,7 @@ export class FakePlayer implements VideoPlayer {
   seekTo(seconds: number): Promise<void> {
     this.calls.push(`seek:${seconds.toFixed(1)}`);
     this.reanchor(seconds);
+    this.bufferAfterJump();
     return Promise.resolve();
   }
 

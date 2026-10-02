@@ -26,6 +26,7 @@ const EVENT_TIMEOUT_MS = 2_000;
 
 export interface StartOptions {
   readonly webDistDir?: string;
+  readonly nodeEnv?: 'test' | 'production';
   readonly persistence?: Persistence;
   /** Real auth (better-auth) instead of the x-test-user header. */
   readonly auth?: { readonly sessions: SessionResolver; readonly handler: RequestHandler };
@@ -41,7 +42,7 @@ export const startServer = async (options: StartOptions = {}) => {
   const metadata = new StubVideoMetadataProvider();
   const app = composeApp({
     config: {
-      nodeEnv: 'test',
+      nodeEnv: options.nodeEnv ?? 'test',
       port: 0,
       logLevel: 'silent',
       publicOrigin: ORIGIN,

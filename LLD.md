@@ -794,7 +794,8 @@ Each presenter calls `RoomPresenter.participants(room)`, so the participants lis
 | A socket disconnects, the user still has others | Nothing (the probe counts more than 0) |
 | The **last** socket of a user disconnects | `room.markAway(userId, now)` → `presence_changed` (row shows "reconnecting…"). Schedule a `GRACE_PERIOD_MS` timer |
 | User reconnects within grace | `join()` sees an existing away member → back online → `presence_changed`. Timer is cancelled |
-| Grace timer fires | `mutate(room => room.reapAway(now))`. Removes members still away past the deadline → `user_left (reason: timeout)`. If one of them was host → `HostTransferred(succession)` |
+| Grace timer fires | `RoomHousekeeping.sweep(roomId)`, i.e. `mutate(no-op)`, whose built-in lazy housekeeping removes members still away past the deadline → `user_left (reason: timeout)`. If one of them was host → `HostTransferred(succession)`. The same sweep serves request expiry (SP-10), so the code exists once |
+| Connection silently dropped (no close frame) | Socket.IO heartbeat (`SOCKET_PING_INTERVAL_MS` 10 s + `SOCKET_PING_TIMEOUT_MS` 5 s) detects it within about 15 s; the defaults (25 s + 20 s) took about 36 s in a real-browser trace. The grace period starts from detection |
 | Instance crashes before its timer fires | **Lazy reaping:** every `mutate` calls `reapAway(now)` first, so the next action in that room reconciles. Correctness never depends on the timer |
 | Explicit `leave_room` (the Leave button) | Immediate `leave()`, no grace. Closing or refreshing the tab does **not** send `leave_room`: the grace period absorbs it, so a refresh doesn't spam leave/join |
 | Kicked user | Banned in the snapshot (`bans`) and removed. Sockets disconnected. Future `join` → `BANNED` |
@@ -843,7 +844,7 @@ type RequestedAction =
    - Events: `RequestResolved` (requester gets a "approved by Alex" / "rejected" toast) and e.g. `PlaybackChanged`.
 3. **Expiry.** `expiresAt = now + REQUEST_TTL_MS`.
    - Lazy: `expireRequests(now)` runs at the start of every `mutate` and emits `RequestResolved(expired)`.
-   - Eager: each instance runs one `REQUEST_SWEEP_MS` interval over rooms with pending requests created there, so expiry toasts appear on time.
+   - Eager: **one precise timer per request**, not a polling sweep. `RequestExpiryWatcher` observes committed batches through `CompositeBroadcaster` (Observer); for each `RequestCreated` it schedules `RoomHousekeeping.sweep` at `expiresAt + DEADLINE_CHECK_SLACK_MS`. A request resolved earlier makes that sweep a no-op. If the instance dies, lazy expiry still applies at the room's next action.
 4. **Abuse limits.** At most `MAX_PENDING_REQUESTS_PER_USER` per user. Same-type requests replace older ones (a new seek replaces the previous seek). Rate limit as in §SP-17.
 5. **UI.**
    - Participants see the same control bar. Buttons show a "request" affordance (hand icon, `aria-label` "Ask to pause", tooltip noting that staff approve). The link form's button reads "Request video", so every control has a distinct accessible name.
@@ -974,6 +975,17 @@ interface SyncEngineOutput {                    // the engine never talks to soc
     - The IFrame API *replaces* the element it's given, so `usePlayerSync` creates that host element imperatively inside a React-owned container.
     - The `@types/youtube-player` typings omit `off`, so the adapter subscribes once per event and fans out to its own listener sets.
 12. **Observability.** The player surface exposes `data-sync-status`, `data-player-state` and `data-drift-ms`. These are used by the real-YouTube E2E test, which asserts drift under 1 s after seeks between two browsers.
+13. **Adaptive seek lead** (added in P10 after real-browser traces).
+    - **Problem:** a player resumes *behind* where it was sent, by its buffering time. With a fixed threshold, drift settled just under it (traces showed −978 ms and −360 ms, so viewers were about 0.6 s apart).
+    - **Learning:** the first measurement after each playing seek/load updates `seekLeadS ← clamp(seekLeadS − drift × SEEK_LEAD_LEARNING_RATE, 0, MAX_SEEK_LEAD_S)`. Measurements beyond `MAX_LEARNABLE_DRIFT_S` (e.g. a slow first load) and measurements while buffering don't teach it.
+    - **Applying it:** later playing seeks and loads target `expected + seekLeadS`; paused seeks are exact. `SEEK_THRESHOLD_S` drops to 0.3 s.
+    - **Measured with real YouTube in two browsers:** both viewers settle within about 20–100 ms of the room timeline after a few corrections.
+14. **Resilience to a broken player** (found by the P10 chaos pass).
+    - **The failure:** if the network drops while the IFrame API loads, `youtube-player`'s once-per-page loader never retries. Its queued calls then never settle, which would block the serialized engine forever.
+    - **Adapter:** every call has a `PLAYER_CALL_TIMEOUT_MS` deadline (→ `PlayerUnavailableError`), and the adapter exposes `whenReady`.
+    - **Engine:** the queue catches a failed pass and forgets the loaded video, so the next tick reloads it.
+    - **Hook:** a watchdog marks the player `unavailable` after `PLAYER_READY_TIMEOUT_MS`. On the browser's `online` event it **reloads the page** if the player never became ready; the session cookie and grace period keep the user in the room with the same role. The surface shows "Couldn't load the YouTube player" with a Reload button.
+    - **Verified:** by `e2e/chaos.spec.ts`.
 
 ## SP-14 Client State & Socket Binding
 
@@ -1329,9 +1341,13 @@ sequenceDiagram
 | `ROOM_CAPACITY` | 100 | Above the 50/room target, bounds fan-out |
 | `GRACE_PERIOD_MS` | 15 000 | Covers refresh and network swap without leaving a room hostless for long |
 | `RECOVERY_WINDOW_MS` | 120 000 | Socket.IO `connectionStateRecovery.maxDisconnectionDuration` |
-| `REQUEST_TTL_MS` / `REQUEST_SWEEP_MS` | 60 000 / 5 000 | |
+| `REQUEST_TTL_MS` | 60 000 | Expiry announced by a per-request timer (no sweep interval) |
+| `DEADLINE_CHECK_SLACK_MS` | 250 | Delay past a deadline before its check runs |
+| `SOCKET_PING_INTERVAL_MS` / `SOCKET_PING_TIMEOUT_MS` | 10 000 / 5 000 | Silent drop detected in ≤ 15 s |
 | `MAX_PENDING_REQUESTS_PER_USER` | 3 | |
-| `SEEK_THRESHOLD_S` | 1.0 | Below this, seeking does more harm (rebuffer) than good |
+| `SEEK_THRESHOLD_S` | 0.3 | With the learned seek lead, corrective seeks land accurately (SP-13 §13) |
+| `MAX_SEEK_LEAD_S` / `SEEK_LEAD_LEARNING_RATE` / `MAX_LEARNABLE_DRIFT_S` | 2 / 0.5 / 3 | Seek-lead learning bounds |
+| `PLAYER_CALL_TIMEOUT_MS` / `PLAYER_READY_TIMEOUT_MS` | 8 000 / 15 000 | Player watchdog (SP-13 §14) |
 | `DRIFT_CHECK_MS` | 2 000 | |
 | `POST_SEEK_COOLDOWN_MS` | 1 500 | Lets the player settle after a seek |
 | `AUTOPLAY_DETECT_MS` | 1 500 | |

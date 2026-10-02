@@ -1,8 +1,8 @@
-import { GRACE_CHECK_SLACK_MS, GRACE_PERIOD_MS } from '@watchparty/shared';
-import type { RoomCode } from '@watchparty/shared';
+import { DEADLINE_CHECK_SLACK_MS, GRACE_PERIOD_MS } from '@watchparty/shared';
 import { DomainError } from '../domain/DomainError';
 import type { MembershipService } from './MembershipService';
-import type { Broadcaster, Logger, PresenceProbe, RealtimeSession, Scheduler } from './ports';
+import type { Broadcaster, PresenceProbe, RealtimeSession, Scheduler } from './ports';
+import type { RoomHousekeeping } from './RoomHousekeeping';
 import type { RoomService } from './RoomService';
 
 /**
@@ -16,7 +16,7 @@ export class PresenceService {
     private readonly broadcaster: Broadcaster,
     private readonly probe: PresenceProbe,
     private readonly scheduler: Scheduler,
-    private readonly logger: Logger,
+    private readonly housekeeping: RoomHousekeeping,
   ) {}
 
   /** A socket closed: when it was the user's last one in the room, mark them away and start the grace period. */
@@ -42,8 +42,8 @@ export class PresenceService {
     });
     await this.broadcaster.publish(room, events);
     if (markedAway) {
-      this.scheduler.schedule(`grace:${roomId}:${userId}`, GRACE_PERIOD_MS + GRACE_CHECK_SLACK_MS, () =>
-        this.reap(roomId),
+      this.scheduler.schedule(`grace:${roomId}:${userId}`, GRACE_PERIOD_MS + DEADLINE_CHECK_SLACK_MS, () =>
+        this.housekeeping.sweep(roomId),
       );
     }
   }
@@ -61,18 +61,6 @@ export class PresenceService {
         throw error;
       }
       await session.detach();
-    }
-  }
-
-  private async reap(roomId: RoomCode): Promise<void> {
-    try {
-      const { room, events } = await this.rooms.mutate(roomId, () => undefined);
-      await this.broadcaster.publish(room, events);
-    } catch (error) {
-      if (error instanceof DomainError && error.code === 'ROOM_NOT_FOUND') {
-        return;
-      }
-      this.logger.error({ err: error, roomId }, 'grace reap failed');
     }
   }
 }
