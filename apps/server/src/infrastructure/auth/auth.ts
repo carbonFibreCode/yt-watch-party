@@ -52,6 +52,10 @@ export const createAuth = (options: AuthOptions) =>
       // Guests on one network share an IP; password sign-in keeps better-auth's strict default.
       customRules: {
         '/sign-in/anonymous': { window: GUEST_SIGN_IN_LIMIT.windowS, max: GUEST_SIGN_IN_LIMIT.max },
+        // Reading your own session is cheap (cookie-cached) and protects nothing when limited, while
+        // a 429 here leaves the client on a stale session: a group behind one IP saw the name prompt
+        // again after creating a room. Found by the production E2E run.
+        '/get-session': false,
       },
     },
     advanced: {
