@@ -208,6 +208,26 @@ describe('auth rate limiting (production settings)', () => {
     expect((await guestSignIn('198.51.100.9')).status).toBe(200);
   });
 
+  it('never rate limits reading your own session (a shared IP must not freeze the UI)', async () => {
+    await server.close();
+    server = await boot(true);
+    const ip = '203.0.113.10';
+    const signedIn = await guestSignIn(ip);
+    const cookie = signedIn.headers
+      .getSetCookie()
+      .map((line) => line.split(';')[0])
+      .join('; ');
+    const statuses = new Set<number>();
+    // Well past better-auth's default budget (100 requests per 10 s per IP).
+    for (let i = 0; i < 150; i += 1) {
+      const response = await fetch(`${server.url}/api/auth/get-session`, {
+        headers: { origin: ORIGIN, cookie, 'cf-connecting-ip': ip },
+      });
+      statuses.add(response.status);
+    }
+    expect([...statuses]).toEqual([200]);
+  });
+
   it('keeps password sign-in strict', async () => {
     await server.close();
     server = await boot(true);

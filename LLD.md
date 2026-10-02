@@ -375,6 +375,7 @@ Brief-mandated event names are kept **verbatim**. `change_video` takes a `url` i
 6. **Auth rate limiting** (better-auth's limiter, enabled in production via `createAuth({ rateLimit })`):
    - **Guest sign-ins** get a custom rule of `GUEST_SIGN_IN_LIMIT` (30/min per client IP), because a group on one Wi-Fi shares an IP.
    - **Email/password** keeps better-auth's strict default (3/10 s) against brute force.
+   - **Reading the session (`/get-session`) is never limited.** It's cookie-cached and only reveals the caller's own session. A 429 there left the client on a stale session, so a host behind a shared IP was asked for their name again right after creating a room. Found by the production E2E run; covered by a Postgres test (150 reads from one IP all succeed).
    - **Client IP:** better-auth reads it from `advanced.ipAddress.ipAddressHeaders` = `CLIENT_IP_HEADERS`. It trusts `X-Forwarded-For` only when the header holds exactly one address, and **when it can't resolve an IP it puts every user in one shared bucket**. On Render (behind Cloudflare) the trusted header is `cf-connecting-ip`, which Cloudflare sets and overwrites. Found in production: guests got "Too many requests"; covered by a Postgres test with production settings.
 
 **SOLID:** auth is a port (DIP). Tests use `StaticSessionResolver` (reads an `x-test-user` header), which keeps integration tests fast and deterministic.
