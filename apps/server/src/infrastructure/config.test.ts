@@ -15,6 +15,7 @@ describe('loadConfig', () => {
       logLevel: 'info',
       publicOrigin: 'https://watch.example.com',
       webDistDir: undefined,
+      metricsToken: undefined,
       databaseUrl: REQUIRED.DATABASE_URL,
       redisUrl: undefined,
       auth: {
@@ -49,6 +50,22 @@ describe('loadConfig', () => {
 
   it('only accepts a redis:// or rediss:// REDIS_URL', () => {
     expect(() => loadConfig({ ...REQUIRED, REDIS_URL: 'http://localhost:6379' })).toThrow(/at REDIS_URL/);
+  });
+
+  it('treats empty optional variables (NAME= in .env) as unset', () => {
+    expect(
+      loadConfig({ ...REQUIRED, METRICS_TOKEN: '', REDIS_URL: '', BETTER_AUTH_URL: '', WEB_DIST_DIR: '' }),
+    ).toMatchObject({
+      metricsToken: undefined,
+      redisUrl: undefined,
+      webDistDir: undefined,
+      auth: { baseUrl: 'https://watch.example.com' },
+    });
+  });
+
+  it('enables metrics only with a long enough token', () => {
+    expect(loadConfig({ ...REQUIRED, METRICS_TOKEN: 't'.repeat(32) }).metricsToken).toBe('t'.repeat(32));
+    expect(() => loadConfig({ ...REQUIRED, METRICS_TOKEN: 'short' })).toThrow(/at METRICS_TOKEN/);
   });
 
   it('rejects a short auth secret', () => {

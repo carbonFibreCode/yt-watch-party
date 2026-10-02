@@ -1,5 +1,6 @@
 import { ROOM_CODE_ALPHABET, youtubeThumbnailUrl } from '@watchparty/shared';
 import type {
+  ClientEventName,
   ErrorCode,
   RoomCode,
   ServerEventName,
@@ -15,8 +16,10 @@ import type {
   AuthUser,
   Broadcaster,
   Clock,
+  CommandOutcome,
   IdGenerator,
   Logger,
+  Metrics,
   PresenceProbe,
   RealtimeSession,
   VideoMetadataProvider,
@@ -190,5 +193,24 @@ export class ManualScheduler {
     for (const { task } of tasks) {
       await task();
     }
+  }
+}
+
+/** Metrics that remember what was reported, for assertions. */
+export class RecordingMetrics implements Metrics {
+  readonly commands: { event: ClientEventName; outcome: CommandOutcome; durationMs: number }[] = [];
+  readonly commits: number[] = [];
+  readonly broadcasts: ServerEventName[] = [];
+
+  commandHandled(event: ClientEventName, outcome: CommandOutcome, durationMs: number): void {
+    this.commands.push({ event, outcome, durationMs });
+  }
+
+  roomCommitted(attempts: number): void {
+    this.commits.push(attempts);
+  }
+
+  eventBroadcast(event: ServerEventName): void {
+    this.broadcasts.push(event);
   }
 }

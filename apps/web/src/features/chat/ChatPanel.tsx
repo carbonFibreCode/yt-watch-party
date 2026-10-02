@@ -78,12 +78,12 @@ export function ChatPanel(): ReactElement {
   };
 
   return (
-    <div className="grid gap-3">
+    <div className="grid gap-3 lg:h-full lg:min-h-0 lg:grid-rows-[1fr_auto]">
       <ol
         ref={listRef}
         aria-label="Chat messages"
         aria-live="polite"
-        className="grid max-h-96 min-h-48 content-start gap-1 overflow-y-auto pr-1"
+        className="grid max-h-96 min-h-48 content-start gap-1 overflow-y-auto pr-1 lg:max-h-none lg:min-h-0"
         onScroll={(e) => {
           const el = e.currentTarget;
           pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < STICKY_BOTTOM_PX;

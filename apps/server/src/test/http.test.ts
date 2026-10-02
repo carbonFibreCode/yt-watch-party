@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { startServer } from './server';
+import { call, startServer } from './server';
 import type { TestServer } from './server';
 
 let server: TestServer | undefined;
@@ -18,6 +18,38 @@ describe('http app', () => {
     const response = await fetch(`${server.url}/api/health`);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ status: 'ok', checks: {}, uptimeS: 0 });
+  });
+
+  it('hides /metrics unless a token is configured', async () => {
+    server = await startServer();
+    expect((await fetch(`${server.url}/metrics`)).status).toBe(404);
+  });
+
+  it('serves Prometheus metrics to the bearer of the token only', async () => {
+    const token = 'm'.repeat(32);
+    server = await startServer({ metricsToken: token });
+    expect((await fetch(`${server.url}/metrics`)).status).toBe(401);
+    expect(
+      (await fetch(`${server.url}/metrics`, { headers: { authorization: `Bearer ${'x'.repeat(32)}` } }))
+        .status,
+    ).toBe(401);
+
+    const { id } = await server.app.rooms.create('Metered', { userId: 'u-host', name: 'Hana' });
+    const host = await server.connect('u-host:Hana');
+    await call(host, 'join_room', { roomId: id });
+    await call(host, 'pause', {});
+    const response = await fetch(`${server.url}/metrics`, { headers: { authorization: `Bearer ${token}` } });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/plain');
+    const body = await response.text();
+    expect(body).toContain('wp_sockets_connected 1');
+    expect(body).toContain('wp_rooms_active 1');
+    expect(body).toContain('wp_commands_total{event="join_room",outcome="ok"} 1');
+    expect(body).toContain('wp_commands_total{event="pause",outcome="ok"} 1');
+    // The host is already a member, so their join is a presence change.
+    expect(body).toContain('wp_broadcast_events_total{event="presence_changed"} 1');
+    expect(body).toContain('wp_cas_attempts_count');
+    expect(body).toContain('process_cpu_user_seconds_total');
   });
 
   it('answers unknown API routes with a JSON 404', async () => {

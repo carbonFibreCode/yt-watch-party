@@ -6,7 +6,7 @@ import type {
   ServerToClientEvents,
   UserId,
 } from '@watchparty/shared';
-import type { Broadcaster, Clock } from '../../application/ports';
+import type { Broadcaster, Clock, Metrics } from '../../application/ports';
 import { RoomPresenter } from '../../application/RoomPresenter';
 import type { DomainEvent, DomainEventType } from '../../domain/events';
 import type { Room } from '../../domain/Room';
@@ -105,7 +105,7 @@ export class SocketBroadcaster implements Broadcaster {
     },
     RequestResolved: (e, b) => {
       const roomId = b.room.id;
-      this.io.to([ch.user(roomId, e.requesterId), ch.staff(roomId)]).emit('request_resolved', {
+      this.emitTo([ch.user(roomId, e.requesterId), ch.staff(roomId)], 'request_resolved', {
         requestId: e.requestId,
         status: e.status,
         ...(e.resolvedBy === undefined ? {} : { resolvedBy: e.resolvedBy }),
@@ -116,6 +116,7 @@ export class SocketBroadcaster implements Broadcaster {
   constructor(
     private readonly io: IoServer,
     private readonly clock: Clock,
+    private readonly metrics: Metrics,
   ) {}
 
   publish(room: Room, events: readonly DomainEvent[]): Promise<void> {
@@ -138,19 +139,21 @@ export class SocketBroadcaster implements Broadcaster {
     event: E,
     ...payload: Parameters<ServerToClientEvents[E]>
   ): void {
-    this.io.to(ch.room(roomId)).emit(event, ...payload);
+    this.emitTo(ch.room(roomId), event, ...payload);
   }
 
   private present<K extends DomainEventType>(event: DomainEvent<K>, batch: Batch): void {
     this.presenters[event.type](event, batch);
   }
 
+  /** The single place events leave the server, so every broadcast is counted. */
   private emitTo<E extends ServerEventName>(
-    channel: string,
+    channels: string | string[],
     event: E,
     ...payload: Parameters<ServerToClientEvents[E]>
   ): void {
-    this.io.to(channel).emit(event, ...payload);
+    this.io.to(channels).emit(event, ...payload);
+    this.metrics.eventBroadcast(event);
   }
 
   /**

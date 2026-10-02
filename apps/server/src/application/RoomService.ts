@@ -5,7 +5,8 @@ import type { DomainEvent } from '../domain/events';
 import { Room } from '../domain/Room';
 import type { RoomSnapshot } from '../domain/snapshot';
 import { KeyedMutex } from './KeyedMutex';
-import type { Clock, IdGenerator, RoomRepository } from './ports';
+import { noMetrics } from './noMetrics';
+import type { Clock, IdGenerator, Metrics, RoomRepository } from './ports';
 import type { ResolvedVideo } from './VideoResolver';
 
 export interface MutationResult<T> {
@@ -23,6 +24,7 @@ export class RoomService {
     private readonly repository: RoomRepository,
     private readonly clock: Clock,
     private readonly ids: IdGenerator,
+    private readonly metrics: Metrics = noMetrics,
     private readonly locks: KeyedMutex = new KeyedMutex(),
   ) {}
 
@@ -70,6 +72,7 @@ export class RoomService {
         const result = change(room, now);
         const next = { ...room.toSnapshot(), version: snapshot.version + 1 };
         if (await this.repository.compareAndSet(next, snapshot.version)) {
+          this.metrics.roomCommitted(attempt);
           return { result, room, events: room.pullEvents() };
         }
       }

@@ -19,6 +19,7 @@ import {
   FakeSession,
   RecordingBroadcaster,
   RecordingLogger,
+  RecordingMetrics,
   SeqIdGenerator,
   StubVideoMetadataProvider,
 } from './fakes';
@@ -39,11 +40,12 @@ export const buildHarness = () => {
   const logger = new RecordingLogger();
   const limiter = new RateLimiterFlexibleAdapter();
 
-  const rooms = new RoomService(roomRepository, clock, ids);
+  const metrics = new RecordingMetrics();
+  const rooms = new RoomService(roomRepository, clock, ids, metrics);
   const chat = new ChatService(chatRepository, broadcaster, ids, clock);
   const membership = new MembershipService(rooms, memberships, chat, broadcaster, presence, clock);
   const actions = new RequestedActions(new VideoResolver(metadata), ids);
-  const pipeline = new CommandPipeline({ rooms, limiter, clock, logger });
+  const pipeline = new CommandPipeline({ rooms, limiter, clock, logger, metrics });
   const registry = registerAllHandlers(new CommandRegistry(pipeline), {
     rooms,
     broadcaster,
@@ -85,6 +87,7 @@ export const buildHarness = () => {
     broadcaster,
     presence,
     logger,
+    metrics,
     rooms,
     chat,
     membership,

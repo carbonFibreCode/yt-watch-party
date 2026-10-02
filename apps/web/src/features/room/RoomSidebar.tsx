@@ -14,6 +14,8 @@ import { selectSelf } from './store';
 type SidebarTab = 'people' | 'chat' | 'queue' | 'requests';
 const TABS: readonly string[] = ['people', 'chat', 'queue', 'requests'] satisfies SidebarTab[];
 const isTab = (value: string): value is SidebarTab => TABS.includes(value);
+/** On wide screens long lists scroll inside the card; chat manages its own scrolling. */
+const SCROLLING_PANEL = 'mt-3 lg:min-h-0 lg:overflow-y-auto';
 
 /** People, chat (with an unread badge), the queue and, for staff, pending requests. */
 export function RoomSidebar(): ReactElement {
@@ -39,9 +41,9 @@ export function RoomSidebar(): ReactElement {
   };
 
   return (
-    <Card className="py-4">
-      <CardContent className="px-4">
-        <Tabs value={shown} onValueChange={select}>
+    <Card className="py-4 lg:min-h-0 lg:flex-1">
+      <CardContent className="px-4 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
+        <Tabs value={shown} onValueChange={select} className="lg:min-h-0 lg:flex-1">
           <TabsList className="w-full">
             <TabsTrigger value="people">
               People <Badge variant="secondary">{peopleCount}</Badge>
@@ -59,17 +61,17 @@ export function RoomSidebar(): ReactElement {
               </TabsTrigger>
             )}
           </TabsList>
-          <TabsContent value="people" className="mt-3">
+          <TabsContent value="people" className={SCROLLING_PANEL}>
             <ParticipantList />
           </TabsContent>
-          <TabsContent value="chat" className="mt-3">
+          <TabsContent value="chat" className="mt-3 lg:flex lg:min-h-0 lg:flex-col">
             <ChatPanel />
           </TabsContent>
-          <TabsContent value="queue" className="mt-3">
+          <TabsContent value="queue" className={SCROLLING_PANEL}>
             <QueuePanel />
           </TabsContent>
           {isStaff && (
-            <TabsContent value="requests" className="mt-3">
+            <TabsContent value="requests" className={SCROLLING_PANEL}>
               <RequestsPanel />
             </TabsContent>
           )}

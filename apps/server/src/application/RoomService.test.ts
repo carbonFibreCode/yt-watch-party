@@ -4,7 +4,7 @@ import { DomainError } from '../domain/DomainError';
 import type { RoomSnapshot } from '../domain/snapshot';
 import { InMemoryRoomRepository } from '../infrastructure/repositories/InMemoryRoomRepository';
 import { RoomService } from './RoomService';
-import { FakeClock, SeqIdGenerator } from './test/fakes';
+import { FakeClock, RecordingMetrics, SeqIdGenerator } from './test/fakes';
 
 const HOST = { userId: 'u-host', name: 'Hana' };
 const GUEST = { userId: 'u-guest', name: 'Gus' };
@@ -32,8 +32,9 @@ class ContendedRepository extends InMemoryRoomRepository {
 
 const setup = (repository = new InMemoryRoomRepository(), codes: string[] = []) => {
   const clock = new FakeClock();
-  const service = new RoomService(repository, clock, new SeqIdGenerator(codes));
-  return { clock, service, repository };
+  const metrics = new RecordingMetrics();
+  const service = new RoomService(repository, clock, new SeqIdGenerator(codes), metrics);
+  return { clock, service, repository, metrics };
 };
 
 describe('RoomService', () => {
@@ -98,7 +99,7 @@ describe('RoomService', () => {
 
     it('retries on a CAS conflict and applies the change exactly once', async () => {
       const repository = new ContendedRepository(2);
-      const { service } = setup(repository, ['K7M2QX']);
+      const { service, metrics } = setup(repository, ['K7M2QX']);
       await service.create('Movie night', HOST);
       let runs = 0;
       await service.mutate('K7M2QX', (room, now) => {
@@ -107,6 +108,7 @@ describe('RoomService', () => {
       });
       expect(runs).toBe(3);
       expect(repository.attempts).toBe(3);
+      expect(metrics.commits).toEqual([3]);
       expect((await repository.load('K7M2QX'))?.members.members).toHaveLength(2);
     });
 

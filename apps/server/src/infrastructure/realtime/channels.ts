@@ -9,3 +9,8 @@ export const ch = {
   /** Every tab of one user in one room. */
   user: (roomId: RoomCode, userId: UserId): string => `room:${roomId}:user:${userId}`,
 } as const;
+
+const ROOM_CHANNEL = /^room:[^:]+$/;
+
+/** True for a whole-room channel (not a staff or per-user one). */
+export const isRoomChannel = (channel: string): boolean => ROOM_CHANNEL.test(channel);

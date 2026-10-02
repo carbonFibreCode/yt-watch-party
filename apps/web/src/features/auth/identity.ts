@@ -3,9 +3,9 @@ import type { AuthSession } from '@/lib/authClient';
 import { DisplayName } from '@watchparty/shared';
 
 /** better-auth's name for a fresh anonymous user; treated as "no name chosen yet". */
-export const DEFAULT_GUEST_NAME = 'Anonymous';
+const DEFAULT_GUEST_NAME = 'Anonymous';
 
-export class AuthError extends Error {
+class AuthError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'AuthError';

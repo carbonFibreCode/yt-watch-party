@@ -28,8 +28,10 @@ import type { AppConfig } from './infrastructure/config';
 import { createHttpApp } from './infrastructure/http/app';
 import { createRoomsRouter } from './infrastructure/http/routes/rooms';
 import { NanoIdGenerator } from './infrastructure/ids/NanoIdGenerator';
+import { PrometheusMetrics } from './infrastructure/metrics/PrometheusMetrics';
 import type { Persistence } from './infrastructure/persistence';
 import { RateLimiterFlexibleAdapter } from './infrastructure/ratelimit/RateLimiterFlexibleAdapter';
+import { isRoomChannel } from './infrastructure/realtime/channels';
 import { SocketBroadcaster } from './infrastructure/realtime/SocketBroadcaster';
 import { SocketGateway } from './infrastructure/realtime/SocketGateway';
 import { SocketPresenceProbe } from './infrastructure/realtime/SocketPresenceProbe';
@@ -75,7 +77,8 @@ export const composeApp = (options: ComposeOptions): ComposedApp => {
   const ids = new NanoIdGenerator();
   const limiter = new RateLimiterFlexibleAdapter(backplane.limiterFactory);
   const videos = new VideoResolver(options.videoMetadata ?? new OEmbedMetadataProvider(logger));
-  const rooms = new RoomService(persistence.rooms, clock, ids);
+  const metrics = new PrometheusMetrics();
+  const rooms = new RoomService(persistence.rooms, clock, ids, metrics);
 
   const httpApp = createHttpApp({
     logger,
@@ -85,6 +88,15 @@ export const composeApp = (options: ComposeOptions): ComposedApp => {
     webDistDir: config.webDistDir,
     production: config.nodeEnv === 'production',
     ...(options.authHandler === undefined ? {} : { authHandler: options.authHandler }),
+    ...(config.metricsToken === undefined
+      ? {}
+      : {
+          metrics: {
+            token: config.metricsToken,
+            contentType: metrics.registry.contentType,
+            render: () => metrics.registry.metrics(),
+          },
+        }),
     apiRouter: createRoomsRouter({ rooms, videos, memberships: persistence.memberships, sessions, limiter }),
   });
   const httpServer = createServer(httpApp);
@@ -102,7 +114,11 @@ export const composeApp = (options: ComposeOptions): ComposedApp => {
     },
   });
 
-  const broadcaster = new CompositeBroadcaster(new SocketBroadcaster(io, clock));
+  metrics.trackLive({
+    sockets: () => io.engine.clientsCount,
+    rooms: () => [...io.of('/').adapter.rooms.keys()].filter(isRoomChannel).length,
+  });
+  const broadcaster = new CompositeBroadcaster(new SocketBroadcaster(io, clock, metrics));
   const housekeeping = new RoomHousekeeping(rooms, broadcaster, logger);
   broadcaster.subscribe(new RequestExpiryWatcher(housekeeping, scheduler, clock));
   const probe = new SocketPresenceProbe(io);
@@ -111,7 +127,7 @@ export const composeApp = (options: ComposeOptions): ComposedApp => {
   const presence = new PresenceService(rooms, membership, broadcaster, probe, scheduler, housekeeping);
   const actions = new RequestedActions(videos, ids);
 
-  const pipeline = new CommandPipeline({ rooms, limiter, clock, logger });
+  const pipeline = new CommandPipeline({ rooms, limiter, clock, logger, metrics });
   const registry = registerAllHandlers(new CommandRegistry(pipeline), {
     rooms,
     broadcaster,

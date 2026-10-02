@@ -27,6 +27,7 @@ const EVENT_TIMEOUT_MS = 2_000;
 
 export interface StartOptions {
   readonly webDistDir?: string;
+  readonly metricsToken?: string;
   readonly nodeEnv?: 'test' | 'production';
   readonly persistence?: Persistence;
   /** Shared fan-out and rate limits, to run several instances against one Redis. */
@@ -50,6 +51,7 @@ export const startServer = async (options: StartOptions = {}) => {
       logLevel: 'silent',
       publicOrigin: ORIGIN,
       webDistDir: options.webDistDir,
+      metricsToken: options.metricsToken,
     },
     logger: pino({ level: 'silent' }),
     sessions: options.auth?.sessions ?? new StaticSessionResolver(),
