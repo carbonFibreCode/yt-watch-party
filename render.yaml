@@ -1,0 +1,26 @@
+# Render Blueprint (LLD SP-23): one Node web service serving the SPA, REST API and WebSockets
+# from a single origin. Postgres is Neon (DATABASE_URL); Redis is added in Phase 12.
+services:
+  - type: web
+    name: watch-party
+    runtime: node
+    plan: free
+    # Install devDependencies too: the build needs Vite and tsdown even though NODE_ENV=production.
+    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm build
+    # Migrations run at boot under a Postgres advisory lock (apps/server/src/main.ts).
+    startCommand: pnpm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      # The service's public URL, e.g. https://watch-party.onrender.com (also the auth base URL).
+      - key: PUBLIC_ORIGIN
+        sync: false
+      # Neon *direct* (non-pooler) connection string, with ?sslmode=require.
+      - key: DATABASE_URL
+        sync: false
+      - key: BETTER_AUTH_SECRET
+        generateValue: true
