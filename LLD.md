@@ -1037,7 +1037,8 @@ interface SyncEngineOutput {                    // the engine never talks to soc
   - Server stamps `{ id, userId, name, emoji, videoTime, at }` and emits to `room`.
   - Client:
     - `ReactionOverlay` animates floating emojis with `motion` (`AnimatePresence`, 2.5s, randomized x).
-    - **"Key moments":** `ReactionMarkers` places small emoji ticks on the scrubber at `videoTime` for the current video. They're kept in store, reset on video change, and grouped per 5s bucket with counts.
+    - **"Key moments":** `ReactionMarkers` places small emoji ticks on the scrubber at `videoTime` for the current video. They're kept in store (last `REACTION_HISTORY_LIMIT`), reset on video change, and grouped per `REACTION_BUCKET_S` bucket by the pure `reactionMoments()`. Each tick shows the bucket's most-used emoji and count, and staff can click one to jump there.
+- **Unread badge:** the store counts chat messages from others while the Chat tab is closed (`chatOpen`/`unreadChat`), so the sidebar can show unread counts without its own subscription.
 - Fixed `REACTION_SET = ['👍','😂','😮','❤️','🔥','👏','😢','🎉']`.
 
 ---
@@ -1056,6 +1057,7 @@ interface SyncEngineOutput {                    // the engine never talks to soc
 - `queue_add` / `queue_remove` require `playback.control`. Participants can `request_action {type:'queue_add'}`.
 - `videoEnded` → `queue.shift()` → `playback.load(next)` emits `QueueChanged` + `PlaybackChanged`.
 - "Play now" from the queue panel = `change_video` with the item's URL, followed by `queue_remove`. Two existing commands, no new event.
+- **Attribution:** `RequestedActions.apply(room, action, origin, now)` credits `origin`. That is the actor for a direct command and the **requester** for an approved request, so an approved `queue_add` reads "Added by Pat", not by the approving host. The P11 E2E test caught this; a handler test now pins it.
 
 ---
 
@@ -1361,6 +1363,7 @@ sequenceDiagram
 | `QUEUE_MAX` | 50 | |
 | `OEMBED_TIMEOUT_MS` | 2 500 | |
 | `REACTION_SET` | 👍 😂 😮 ❤️ 🔥 👏 😢 🎉 | |
+| `REACTION_HISTORY_LIMIT` / `REACTION_BUCKET_S` / `REACTION_FLOAT_MS` | 300 / 5 / 2 500 | Client-side markers and overlay |
 
 ---
 

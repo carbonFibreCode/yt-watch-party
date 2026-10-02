@@ -1,5 +1,4 @@
-import type { RequestableAction } from '@watchparty/shared';
-import type { Participant } from '../domain/Participant';
+import type { RequestableAction, UserRef } from '@watchparty/shared';
 import type { RequestedAction } from '../domain/RequestBook';
 import type { Room } from '../domain/Room';
 import type { IdGenerator } from './ports';
@@ -35,8 +34,11 @@ export class RequestedActions {
     }
   }
 
-  /** Pure phase, inside RoomService.mutate. */
-  apply(room: Room, action: RequestedAction, actor: Participant, now: number): void {
+  /**
+   * Pure phase, inside RoomService.mutate. `origin` is who the action is credited to: the actor
+   * for a direct command, the requester (not the approver) for an approved request.
+   */
+  apply(room: Room, action: RequestedAction, origin: UserRef, now: number): void {
     switch (action.type) {
       case 'play':
         room.play(now);
@@ -52,7 +54,7 @@ export class RequestedActions {
         return;
       case 'queue_add':
         room.enqueue(
-          { id: this.ids.next(), video: action.video, addedBy: { userId: actor.userId, name: actor.name } },
+          { id: this.ids.next(), video: action.video, addedBy: { userId: origin.userId, name: origin.name } },
           now,
         );
         return;

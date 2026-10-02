@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { joinAck, participant, playback } from '@/test/fixtures';
-import { CHAT_RENDER_LIMIT } from '@watchparty/shared';
+import { CHAT_RENDER_LIMIT, REACTION_HISTORY_LIMIT } from '@watchparty/shared';
 import type { RequestView } from '@watchparty/shared';
 import { createRoomStore, selectIsSelf, selectSelf } from './store';
 
@@ -65,6 +65,46 @@ describe('room store', () => {
     store.getState().trackMyRequest('r2');
     store.getState().untrackMyRequest('r1');
     expect(store.getState().myRequests).toEqual(['r2']);
+  });
+
+  it('counts unread messages from others only while the chat is closed', () => {
+    const store = createRoomStore();
+    store.getState().hydrate(joinAck());
+    const say = (id: string, userId: string): void => {
+      store
+        .getState()
+        .addChat({ id, user: { userId, name: userId, role: 'participant' }, text: id, createdAt: 1 });
+    };
+    say('a', 'other');
+    say('b', 'me');
+    say('c', 'other');
+    expect(store.getState().unreadChat).toBe(2);
+    store.getState().setChatOpen(true);
+    expect(store.getState().unreadChat).toBe(0);
+    say('d', 'other');
+    expect(store.getState().unreadChat).toBe(0);
+    store.getState().setChatOpen(false);
+    say('e', 'other');
+    expect(store.getState().unreadChat).toBe(1);
+  });
+
+  it('keeps recent reactions per video and clears them when the video changes', () => {
+    const store = createRoomStore();
+    const react = (i: number): void => {
+      store
+        .getState()
+        .addReaction({ id: String(i), userId: 'a', name: 'a', emoji: '🔥', videoTime: i, at: i });
+    };
+    store.getState().applyPlayback(playback({ rev: 1 }));
+    for (let i = 0; i < REACTION_HISTORY_LIMIT + 5; i += 1) {
+      react(i);
+    }
+    expect(store.getState().reactions).toHaveLength(REACTION_HISTORY_LIMIT);
+    expect(store.getState().reactions[0]?.id).toBe('5');
+    store.getState().applyPlayback(playback({ rev: 2, currentTime: 50 }));
+    expect(store.getState().reactions).toHaveLength(REACTION_HISTORY_LIMIT);
+    store.getState().applyPlayback(playback({ rev: 3, videoId: 'jNQXAC9IVRw' }));
+    expect(store.getState().reactions).toEqual([]);
   });
 
   it('ignores duplicate chat messages and caps the history', () => {

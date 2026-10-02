@@ -1,6 +1,7 @@
 import { Film, Loader2, MonitorX, Play, RefreshCw, VolumeX, WifiOff } from 'lucide-react';
 import type { ReactElement, RefObject } from 'react';
 import { Button } from '@/components/ui/button';
+import { ReactionOverlay } from '@/features/reactions/ReactionOverlay';
 import { useRoom } from '@/features/room/RoomContext';
 import type { PlayerSync } from './usePlayerSync';
 
@@ -29,6 +30,7 @@ export function PlayerSurface({ containerRef, sync, canControl }: PlayerSurfaceP
       <div ref={containerRef} className="absolute inset-0" />
       {/* Swallows clicks so the embedded player's own UI can never change playback. */}
       <div className="absolute inset-0" aria-hidden />
+      <ReactionOverlay />
 
       {!hasVideo && (
         <div className="bg-muted/40 absolute inset-0 grid place-items-center">

@@ -1,5 +1,6 @@
 import { useCallback, useRef } from 'react';
 import type { ReactElement } from 'react';
+import { ReactionBar } from '@/features/reactions/ReactionBar';
 import { useRoom, useServerClock } from '@/features/room/RoomContext';
 import { projectPosition, timelineFromView } from '@watchparty/shared';
 import { ControlBar } from './ControlBar';
@@ -37,18 +38,19 @@ export function PlayerColumn(): ReactElement {
     <div className="grid gap-3">
       <PlayerSurface containerRef={containerRef} sync={sync} canControl={command.mode === 'direct'} />
       {video !== null && (
-        <div className="flex min-w-0 items-center gap-3 px-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-3 px-1">
           <img
             src={video.thumbnailUrl}
             alt=""
             className="bg-muted aspect-video h-9 shrink-0 rounded object-cover"
           />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-muted-foreground text-xs">Now playing</p>
             <p className="truncate text-sm font-medium" title={video.title}>
               {video.title}
             </p>
           </div>
+          <ReactionBar />
         </div>
       )}
       <ControlBar command={command} duration={duration} />

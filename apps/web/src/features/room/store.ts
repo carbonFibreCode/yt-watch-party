@@ -1,6 +1,6 @@
 import { createStore } from 'zustand/vanilla';
 import type { StoreApi } from 'zustand/vanilla';
-import { CHAT_RENDER_LIMIT } from '@watchparty/shared';
+import { CHAT_RENDER_LIMIT, REACTION_HISTORY_LIMIT } from '@watchparty/shared';
 import type {
   ChatMessageView,
   ErrorCode,
@@ -8,6 +8,7 @@ import type {
   ParticipantView,
   PlaybackView,
   QueueItemView,
+  ReactionView,
   RequestView,
   RoomCode,
   UserId,
@@ -35,6 +36,11 @@ export interface RoomData {
   /** Ids of requests this user sent and is still waiting on. */
   readonly myRequests: readonly string[];
   readonly chat: readonly ChatEntry[];
+  /** Reactions on the current video (reset when the video changes). */
+  readonly reactions: readonly ReactionView[];
+  /** Whether the chat is on screen; messages from others arriving while it is not count as unread. */
+  readonly chatOpen: boolean;
+  readonly unreadChat: number;
 }
 
 export interface RoomActions {
@@ -52,6 +58,8 @@ export interface RoomActions {
   untrackMyRequest(requestId: string): void;
   addChat(message: ChatMessageView): void;
   addSystem(text: string, at: number): void;
+  addReaction(reaction: ReactionView): void;
+  setChatOpen(open: boolean): void;
 }
 
 export type RoomState = RoomData & RoomActions;
@@ -71,6 +79,9 @@ const INITIAL: RoomData = {
   requests: [],
   myRequests: [],
   chat: [],
+  reactions: [],
+  chatOpen: false,
+  unreadChat: 0,
 };
 
 const capped = (entries: readonly ChatEntry[]): readonly ChatEntry[] =>
@@ -112,9 +123,14 @@ export const createRoomStore = (): RoomStore =>
     setHost: (hostId) => {
       set({ hostId });
     },
-    /** Ignores out-of-order states: only a newer revision replaces the current one. */
+    /** Ignores out-of-order states; a different video also clears the previous video's reactions. */
     applyPlayback: (playback) => {
-      set((s) => (s.playback !== null && playback.rev <= s.playback.rev ? s : { playback }));
+      set((s) => {
+        if (s.playback !== null && playback.rev <= s.playback.rev) {
+          return s;
+        }
+        return s.playback?.videoId === playback.videoId ? { playback } : { playback, reactions: [] };
+      });
     },
     setQueue: (queue) => {
       set({ queue });
@@ -133,11 +149,22 @@ export const createRoomStore = (): RoomStore =>
       set((s) => ({ myRequests: s.myRequests.filter((id) => id !== requestId) }));
     },
     addChat: (message) => {
-      set((s) =>
-        s.chat.some((e) => e.id === message.id)
-          ? s
-          : { chat: capped([...s.chat, { kind: 'message', ...message }]) },
-      );
+      set((s) => {
+        if (s.chat.some((e) => e.id === message.id)) {
+          return s;
+        }
+        const unread = !s.chatOpen && message.user.userId !== s.selfId;
+        return {
+          chat: capped([...s.chat, { kind: 'message', ...message }]),
+          unreadChat: unread ? s.unreadChat + 1 : s.unreadChat,
+        };
+      });
+    },
+    addReaction: (reaction) => {
+      set((s) => ({ reactions: [...s.reactions, reaction].slice(-REACTION_HISTORY_LIMIT) }));
+    },
+    setChatOpen: (open) => {
+      set({ chatOpen: open, ...(open ? { unreadChat: 0 } : {}) });
     },
     addSystem: (text, at) => {
       systemSequence += 1;
