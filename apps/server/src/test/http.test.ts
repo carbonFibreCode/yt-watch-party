@@ -36,6 +36,13 @@ describe('http app', () => {
     expect(response.headers.get('x-powered-by')).toBeNull();
   });
 
+  it('sends HTTPS-only headers in production', async () => {
+    server = await startServer({ nodeEnv: 'production' });
+    const response = await fetch(`${server.url}/api/health`);
+    expect(response.headers.get('strict-transport-security')).toContain('max-age=');
+    expect(response.headers.get('content-security-policy')).toContain('upgrade-insecure-requests');
+  });
+
   it('keeps plain-http development usable: no HSTS or upgrade-insecure-requests outside production', async () => {
     server = await startServer();
     const response = await fetch(`${server.url}/api/health`);

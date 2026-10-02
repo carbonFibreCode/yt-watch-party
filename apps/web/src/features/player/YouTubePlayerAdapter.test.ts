@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type YouTubePlayerFactory from 'youtube-player';
-import { YouTubePlayerAdapter } from './YouTubePlayerAdapter';
+import { PLAYER_CALL_TIMEOUT_MS } from '@watchparty/shared';
+import { PlayerUnavailableError, YouTubePlayerAdapter } from './YouTubePlayerAdapter';
 
 type Factory = typeof YouTubePlayerFactory;
 
@@ -27,6 +28,34 @@ const fakeFactory = () => {
 };
 
 describe('YouTubePlayerAdapter', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('becomes ready on the player’s ready event', async () => {
+    const { factory, fire } = fakeFactory();
+    const adapter = new YouTubePlayerAdapter(document.createElement('div'), factory);
+    let ready = false;
+    void adapter.whenReady.then(() => {
+      ready = true;
+    });
+    await Promise.resolve();
+    expect(ready).toBe(false);
+    fire('ready', {});
+    await adapter.whenReady;
+    expect(ready).toBe(true);
+  });
+
+  it('fails calls that never settle instead of hanging (API never loaded)', async () => {
+    vi.useFakeTimers();
+    const { factory, player } = fakeFactory();
+    player.playVideo.mockReturnValue(new Promise(() => undefined));
+    const adapter = new YouTubePlayerAdapter(document.createElement('div'), factory);
+    const play = adapter.play();
+    vi.advanceTimersByTime(PLAYER_CALL_TIMEOUT_MS);
+    await expect(play).rejects.toBeInstanceOf(PlayerUnavailableError);
+  });
+
   it('creates the player with native controls and keyboard disabled', () => {
     const { factory } = fakeFactory();
     const host = document.createElement('div');

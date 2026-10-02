@@ -107,6 +107,11 @@ export interface PresenceProbe {
   countSockets(roomId: RoomCode, userId: UserId): Promise<number>;
 }
 
+/** Observes every committed batch of domain events (e.g. to schedule follow-up work). */
+export interface RoomEventListener {
+  onEvents(room: Room, events: readonly DomainEvent[]): void;
+}
+
 export interface Broadcaster {
   /** Translates domain events into wire events and side effects (LLD SP-8). */
   publish(room: Room, events: readonly DomainEvent[]): Promise<void>;

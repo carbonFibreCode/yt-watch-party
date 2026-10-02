@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import { useQuietRpc, useRoomStore, useServerClock } from '@/features/room/RoomContext';
 import type { VideoId } from '@watchparty/shared';
-import { DRIFT_CHECK_MS } from '@watchparty/shared';
+import { DRIFT_CHECK_MS, PLAYER_READY_TIMEOUT_MS } from '@watchparty/shared';
 import type { PlayerState } from './ports';
 import { SyncEngine } from './SyncEngine';
 import type { SyncStatus } from './SyncEngine';
@@ -10,6 +10,8 @@ import { YouTubePlayerAdapter } from './YouTubePlayerAdapter';
 
 export interface PlayerSync {
   readonly status: SyncStatus;
+  /** The YouTube player never finished loading (e.g. the connection dropped while it loaded). */
+  readonly unavailable: boolean;
   readonly playerState: PlayerState;
   /** Length reported by this client's player for the given video. */
   readonly duration: { readonly videoId: VideoId; readonly seconds: number } | null;
@@ -33,6 +35,7 @@ export const usePlayerSync = (container: RefObject<HTMLDivElement | null>): Play
   const [playerState, setPlayerState] = useState<PlayerState>('unstarted');
   const [duration, setDuration] = useState<PlayerSync['duration']>(null);
   const [driftMs, setDriftMs] = useState<number | null>(null);
+  const [unavailable, setUnavailable] = useState(false);
 
   useEffect(() => {
     const element = container.current;
@@ -45,6 +48,26 @@ export const usePlayerSync = (container: RefObject<HTMLDivElement | null>): Play
     element.appendChild(host);
     const player = new YouTubePlayerAdapter(host);
     const stopWatchingState = player.onStateChange(setPlayerState);
+
+    // youtube-player loads the IFrame API once per page and never retries a failed load, so a
+    // player that never became ready can only be recovered by reloading the page (the session and
+    // the presence grace period make that seamless). Do it as soon as the browser is back online.
+    let ready = false;
+    void player.whenReady.then(() => {
+      ready = true;
+      setUnavailable(false);
+    });
+    const readyTimer = setTimeout(() => {
+      if (!ready) {
+        setUnavailable(true);
+      }
+    }, PLAYER_READY_TIMEOUT_MS);
+    const onOnline = (): void => {
+      if (!ready) {
+        window.location.reload();
+      }
+    };
+    window.addEventListener('online', onOnline);
     const engine = new SyncEngine(player, clock, {
       durationKnown: (videoId, seconds) => {
         setDuration({ videoId, seconds });
@@ -80,6 +103,8 @@ export const usePlayerSync = (container: RefObject<HTMLDivElement | null>): Play
     document.addEventListener('visibilitychange', onVisibility);
 
     return () => {
+      clearTimeout(readyTimer);
+      window.removeEventListener('online', onOnline);
       document.removeEventListener('visibilitychange', onVisibility);
       clearInterval(interval);
       unsubscribe();
@@ -95,5 +120,5 @@ export const usePlayerSync = (container: RefObject<HTMLDivElement | null>): Play
     void engineRef.current?.userGesture();
   }, []);
 
-  return { status, playerState, duration, driftMs, resume };
+  return { status, unavailable, playerState, duration, driftMs, resume };
 };

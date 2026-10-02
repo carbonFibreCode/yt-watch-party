@@ -1,4 +1,5 @@
 import YouTubePlayerFactory from 'youtube-player';
+import { PLAYER_CALL_TIMEOUT_MS } from '@watchparty/shared';
 import type { VideoId } from '@watchparty/shared';
 import type { PlayerState, VideoPlayer } from './ports';
 
@@ -17,12 +18,21 @@ const STATES: Readonly<Record<number, PlayerState>> = {
 
 const eventData = (event: object): unknown => ('data' in event ? event.data : undefined);
 
+/** A player call did not settle in time (e.g. the IFrame API never finished loading). */
+export class PlayerUnavailableError extends Error {
+  constructor() {
+    super('YouTube player did not respond');
+    this.name = 'PlayerUnavailableError';
+  }
+}
+
 /**
  * VideoPlayer over the YouTube IFrame API via `youtube-player` (LLD SP-13). Native controls and
  * keyboard are disabled: the only way to change playback is the app's own control bar, so player
  * events are never mistaken for user intent (no echo loops by construction).
  */
 export class YouTubePlayerAdapter implements VideoPlayer {
+  readonly whenReady: Promise<void>;
   private readonly player: YouTubePlayer;
   private readonly stateListeners = new Set<(state: PlayerState) => void>();
   private readonly errorListeners = new Set<(code: number) => void>();
@@ -41,6 +51,11 @@ export class YouTubePlayerAdapter implements VideoPlayer {
         rel: 0,
         origin: window.location.origin,
       },
+    });
+    this.whenReady = new Promise((resolve) => {
+      this.player.on('ready', () => {
+        resolve();
+      });
     });
     // One listener per event for the player's lifetime; subscribers fan out from our own sets
     // (the typings do not expose `off`).
@@ -64,39 +79,39 @@ export class YouTubePlayerAdapter implements VideoPlayer {
 
   load(videoId: VideoId, startSeconds: number, autoplay: boolean): Promise<void> {
     const video = { videoId, startSeconds };
-    return autoplay ? this.player.loadVideoById(video) : this.player.cueVideoById(video);
+    return this.call(() => (autoplay ? this.player.loadVideoById(video) : this.player.cueVideoById(video)));
   }
 
   play(): Promise<void> {
-    return this.player.playVideo();
+    return this.call(() => this.player.playVideo());
   }
 
   pause(): Promise<void> {
-    return this.player.pauseVideo();
+    return this.call(() => this.player.pauseVideo());
   }
 
   seekTo(seconds: number): Promise<void> {
-    return this.player.seekTo(seconds, true);
+    return this.call(() => this.player.seekTo(seconds, true));
   }
 
   getCurrentTime(): Promise<number> {
-    return this.player.getCurrentTime();
+    return this.call(() => this.player.getCurrentTime());
   }
 
   getDuration(): Promise<number> {
-    return this.player.getDuration();
+    return this.call(() => this.player.getDuration());
   }
 
   async getState(): Promise<PlayerState> {
-    return STATES[await this.player.getPlayerState()] ?? 'unstarted';
+    return STATES[await this.call(() => this.player.getPlayerState())] ?? 'unstarted';
   }
 
   isMuted(): Promise<boolean> {
-    return this.player.isMuted();
+    return this.call(() => this.player.isMuted());
   }
 
   setMuted(muted: boolean): Promise<void> {
-    return muted ? this.player.mute() : this.player.unMute();
+    return this.call(() => (muted ? this.player.mute() : this.player.unMute()));
   }
 
   onStateChange(listener: (state: PlayerState) => void): () => void {
@@ -107,6 +122,22 @@ export class YouTubePlayerAdapter implements VideoPlayer {
   onError(listener: (code: number) => void): () => void {
     this.errorListeners.add(listener);
     return () => this.errorListeners.delete(listener);
+  }
+
+  /**
+   * youtube-player queues calls until the IFrame API is ready; if it never loads (e.g. the network
+   * dropped mid-load) they would hang forever, so every call gets a deadline.
+   */
+  private call<T>(run: () => Promise<T>): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        reject(new PlayerUnavailableError());
+      }, PLAYER_CALL_TIMEOUT_MS);
+    });
+    return Promise.race([run(), deadline]).finally(() => {
+      clearTimeout(timer);
+    });
   }
 
   destroy(): void {

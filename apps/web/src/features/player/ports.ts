@@ -5,6 +5,8 @@ export type PlayerState = 'unstarted' | 'ended' | 'playing' | 'paused' | 'buffer
 
 /** The video player as the sync engine sees it (LLD SP-13); YouTubePlayerAdapter implements it. */
 export interface VideoPlayer {
+  /** Resolves once the underlying player can accept commands. */
+  readonly whenReady: Promise<void>;
   load(videoId: VideoId, startSeconds: number, autoplay: boolean): Promise<void>;
   play(): Promise<void>;
   pause(): Promise<void>;

@@ -1,4 +1,4 @@
-import { Film, Loader2, MonitorX, Play, VolumeX } from 'lucide-react';
+import { Film, Loader2, MonitorX, Play, RefreshCw, VolumeX, WifiOff } from 'lucide-react';
 import type { ReactElement, RefObject } from 'react';
 import { Button } from '@/components/ui/button';
 import { useRoom } from '@/features/room/RoomContext';
@@ -22,7 +22,7 @@ export function PlayerSurface({ containerRef, sync, canControl }: PlayerSurfaceP
     <div
       className="relative aspect-video w-full overflow-hidden rounded-xl bg-black"
       data-testid="player"
-      data-sync-status={status}
+      data-sync-status={sync.unavailable ? 'unavailable' : status}
       data-player-state={sync.playerState}
       data-drift-ms={sync.driftMs ?? ''}
     >
@@ -78,6 +78,30 @@ export function PlayerSurface({ containerRef, sync, canControl }: PlayerSurfaceP
             <span className="font-medium">Click to join playback</span>
           </span>
         </button>
+      )}
+
+      {sync.unavailable && (
+        <div
+          role="alert"
+          className="absolute inset-0 grid place-items-center bg-black/85 px-6 text-center text-white"
+        >
+          <div className="grid justify-items-center gap-3">
+            <WifiOff className="size-10" />
+            <p className="font-medium">Couldn't load the YouTube player</p>
+            <p className="text-sm text-white/70">
+              Check your connection. It reloads by itself when you're back online.
+            </p>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                window.location.reload();
+              }}
+            >
+              <RefreshCw /> Reload player
+            </Button>
+          </div>
+        </div>
       )}
 
       {status === 'embed_error' && (

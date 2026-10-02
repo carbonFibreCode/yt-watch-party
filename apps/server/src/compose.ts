@@ -3,15 +3,23 @@ import type { Server as HttpServer } from 'node:http';
 import type { RequestHandler } from 'express';
 import type { Logger as PinoLogger } from 'pino';
 import { Server } from 'socket.io';
-import { MAX_HTTP_BUFFER_BYTES, RECOVERY_WINDOW_MS } from '@watchparty/shared';
+import {
+  MAX_HTTP_BUFFER_BYTES,
+  RECOVERY_WINDOW_MS,
+  SOCKET_PING_INTERVAL_MS,
+  SOCKET_PING_TIMEOUT_MS,
+} from '@watchparty/shared';
 import { ChatService } from './application/ChatService';
 import { CommandPipeline } from './application/commands/CommandPipeline';
 import { CommandRegistry } from './application/commands/CommandRegistry';
 import { registerAllHandlers } from './application/commands/registerAllHandlers';
+import { CompositeBroadcaster } from './application/CompositeBroadcaster';
 import { MembershipService } from './application/MembershipService';
 import type { Clock, Scheduler, SessionResolver, VideoMetadataProvider } from './application/ports';
 import { PresenceService } from './application/PresenceService';
 import { RequestedActions } from './application/RequestedActions';
+import { RequestExpiryWatcher } from './application/RequestExpiryWatcher';
+import { RoomHousekeeping } from './application/RoomHousekeeping';
 import { RoomService } from './application/RoomService';
 import { VideoResolver } from './application/VideoResolver';
 import type { AppConfig } from './infrastructure/config';
@@ -79,6 +87,8 @@ export const composeApp = (options: ComposeOptions): ComposedApp => {
     serveClient: false,
     transports: ['websocket'],
     maxHttpBufferSize: MAX_HTTP_BUFFER_BYTES,
+    pingInterval: SOCKET_PING_INTERVAL_MS,
+    pingTimeout: SOCKET_PING_TIMEOUT_MS,
     connectionStateRecovery: { maxDisconnectionDuration: RECOVERY_WINDOW_MS, skipMiddlewares: true },
     allowRequest: (req, callback) => {
       const { origin } = req.headers;
@@ -86,11 +96,13 @@ export const composeApp = (options: ComposeOptions): ComposedApp => {
     },
   });
 
-  const broadcaster = new SocketBroadcaster(io, clock);
+  const broadcaster = new CompositeBroadcaster(new SocketBroadcaster(io, clock));
+  const housekeeping = new RoomHousekeeping(rooms, broadcaster, logger);
+  broadcaster.subscribe(new RequestExpiryWatcher(housekeeping, scheduler, clock));
   const probe = new SocketPresenceProbe(io);
   const chat = new ChatService(persistence.chat, broadcaster, ids, clock);
   const membership = new MembershipService(rooms, persistence.memberships, chat, broadcaster, probe, clock);
-  const presence = new PresenceService(rooms, membership, broadcaster, probe, scheduler, logger);
+  const presence = new PresenceService(rooms, membership, broadcaster, probe, scheduler, housekeeping);
   const actions = new RequestedActions(videos, ids);
 
   const pipeline = new CommandPipeline({ rooms, limiter, clock, logger });
