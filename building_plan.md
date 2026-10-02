@@ -342,7 +342,7 @@ P0 Scaffold ─► P1 Shared Contract ─► P2 Domain ─► P3 Application ─
 - [x] `RateLimiterRedis` strategy. `@socket.io/redis-streams-adapter` strategy. All selected by `REDIS_URL` (the `Backplane` Strategy).
 - [x] docker-compose `scale` profile: `server` ×2 + `infra/nginx.conf` (`least_conn`, WS upgrade)
 - [x] `tools/loadtest`: guest sign-in per virtual user, rooms × users, fan-out latency p50/p95/p99, error counts
-- [ ] Enable `REDIS_URL` in prod and re-run the prod smoke test
+- [x] Enable `REDIS_URL` in prod and re-run the prod smoke test (Render Key Value from the Blueprint; `/api/health` reports `redis: true`; full E2E suite passes against production)
 
 **Exit Criteria**
 - Two instances: a user on instance A kicks a user on instance B and the kick works. Sync works across instances.
