@@ -21,6 +21,10 @@ services:
         value: info
       - key: COREPACK_ENABLE_DOWNLOAD_PROMPT
         value: '0'
+      # Render sits behind Cloudflare, which sets the real client IP here (and overwrites spoofed
+      # values). X-Forwarded-For carries several hops, which better-auth will not trust.
+      - key: CLIENT_IP_HEADERS
+        value: cf-connecting-ip
       # The service's public URL, e.g. https://watch-party.onrender.com (also the auth base URL).
       - key: PUBLIC_ORIGIN
         sync: false

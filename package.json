@@ -17,7 +17,8 @@
     "typecheck": "pnpm -r typecheck && tsc -p tsconfig.json --noEmit && tsc -p e2e/tsconfig.json --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "e2e:prod": "E2E_BASE_URL=${E2E_BASE_URL:?set E2E_BASE_URL to the deployed URL} playwright test"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

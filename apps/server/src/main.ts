@@ -35,6 +35,8 @@ const auth = createAuth({
   baseUrl: config.auth.baseUrl,
   trustedOrigins: [config.publicOrigin],
   secureCookies: config.nodeEnv === 'production',
+  rateLimit: config.nodeEnv === 'production',
+  clientIpHeaders: config.auth.clientIpHeaders,
   memberships: persistence.memberships,
   logger,
 });

@@ -11,6 +11,16 @@ const EnvSchema = z.object({
   DATABASE_URL: z.url(),
   BETTER_AUTH_SECRET: z.string().min(MIN_SECRET_LEN),
   BETTER_AUTH_URL: z.url().optional(),
+  /** Request headers carrying the real client IP, in order (e.g. `cf-connecting-ip` behind Cloudflare). */
+  CLIENT_IP_HEADERS: z
+    .string()
+    .default('x-forwarded-for')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((header) => header.trim().toLowerCase())
+        .filter(Boolean),
+    ),
   WEB_DIST_DIR: z.string().min(1).optional(),
 });
 
@@ -25,7 +35,11 @@ export interface AppConfig {
 
 export interface ServerConfig extends AppConfig {
   readonly databaseUrl: string;
-  readonly auth: { readonly secret: string; readonly baseUrl: string };
+  readonly auth: {
+    readonly secret: string;
+    readonly baseUrl: string;
+    readonly clientIpHeaders: readonly string[];
+  };
 }
 
 export const loadConfig = (env: Readonly<Record<string, string | undefined>>): ServerConfig => {
@@ -42,6 +56,10 @@ export const loadConfig = (env: Readonly<Record<string, string | undefined>>): S
     publicOrigin,
     webDistDir: e.WEB_DIST_DIR,
     databaseUrl: e.DATABASE_URL,
-    auth: { secret: e.BETTER_AUTH_SECRET, baseUrl: e.BETTER_AUTH_URL ?? publicOrigin },
+    auth: {
+      secret: e.BETTER_AUTH_SECRET,
+      baseUrl: e.BETTER_AUTH_URL ?? publicOrigin,
+      clientIpHeaders: e.CLIENT_IP_HEADERS,
+    },
   };
 };
