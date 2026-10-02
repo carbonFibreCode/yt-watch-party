@@ -272,9 +272,11 @@ P0 Scaffold ─► P1 Shared Contract ─► P2 Domain ─► P3 Application ─
 **Goal:** remove deployment risk while there is still time to react.
 
 **Tasks**
-- [ ] Neon project + pooled URL. Render Web Service (build/start/health from LLD SP-23). Render Key Value is created now but stays **unused until P12** (`REDIS_URL` unset).
-- [ ] Set env vars (`PUBLIC_ORIGIN`, `BETTER_AUTH_*`, `DATABASE_URL`). Migrations run in the build step.
-- [ ] Production smoke test: laptop + phone on mobile data, same room, every core action
+- [x] Neon project + **direct** (non-pooler) URL. Render Web Service from the `render.yaml` Blueprint. Redis is added in P12 (`REDIS_URL` unset until then).
+- [x] Set env vars (`PUBLIC_ORIGIN`, `BETTER_AUTH_*`, `DATABASE_URL`). Migrations run in the build step.
+- [x] Production smoke test: laptop + phone on mobile data, same room, every core action
+
+**Done:** https://watch-party-w4wi.onrender.com. The full Playwright suite passes against it (`E2E_BASE_URL=… pnpm e2e`), twice in a row. Fixed on the way: corepack shims on a read-only `/usr/bin`, and better-auth's shared rate-limit bucket behind Cloudflare.
 
 **Exit Criteria:** the public URL works end-to-end for create, join, sync, roles, and approval. The URL is added to the README stub.
 
