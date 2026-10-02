@@ -1,0 +1,36 @@
+{
+  "url": "http://localhost:8080",
+  "rooms": 100,
+  "usersPerRoom": 50,
+  "durationS": 60,
+  "seekEveryMs": 2000,
+  "signInS": 5.4,
+  "joined": 5000,
+  "join": {
+    "count": 5000,
+    "p50": 63.9,
+    "p95": 219.9,
+    "p99": 257.2,
+    "max": 312.4
+  },
+  "seekAck": {
+    "count": 3000,
+    "p50": 1.7,
+    "p95": 4.2,
+    "p99": 6.6,
+    "max": 14.7
+  },
+  "fanOut": {
+    "count": 150000,
+    "p50": 2,
+    "p95": 4,
+    "p99": 6,
+    "max": 51
+  },
+  "deliveries": {
+    "expected": 150000,
+    "received": 150000,
+    "ratio": 1
+  },
+  "errors": {}
+}

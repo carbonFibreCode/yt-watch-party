@@ -31,12 +31,19 @@ export const createMemoryPersistence = (): Persistence => ({
   stop: () => Promise.resolve(),
 });
 
-/** Hot rooms in memory with write-behind to Postgres; chat and memberships straight to Postgres. */
-export const createPostgresPersistence = (database: Database, logger: Logger): Persistence => {
+/**
+ * Hot rooms (in memory, or in Redis when instances share them) with write-behind to Postgres;
+ * chat and memberships straight to Postgres.
+ */
+export const createPostgresPersistence = (
+  database: Database,
+  logger: Logger,
+  hot: RoomRepository = new InMemoryRoomRepository(),
+): Persistence => {
   const archive = new PostgresRoomRepository(database.db);
   const flusher = new SnapshotFlusher(archive, logger);
   return {
-    rooms: new TieredRoomRepository(new InMemoryRoomRepository(), archive, flusher),
+    rooms: new TieredRoomRepository(hot, archive, flusher),
     chat: new PgChatRepository(database.db),
     memberships: new PgMembershipRepository(database.db),
     healthChecks: [{ name: 'db', check: () => database.ping() }],

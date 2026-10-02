@@ -40,14 +40,19 @@ describe('http app', () => {
     server = await startServer({ nodeEnv: 'production' });
     const response = await fetch(`${server.url}/api/health`);
     expect(response.headers.get('strict-transport-security')).toContain('max-age=');
-    expect(response.headers.get('content-security-policy')).toContain('upgrade-insecure-requests');
+    const csp = response.headers.get('content-security-policy') ?? '';
+    expect(csp).toContain('upgrade-insecure-requests');
+    expect(csp).not.toContain('http://www.youtube.com');
   });
 
   it('keeps plain-http development usable: no HSTS or upgrade-insecure-requests outside production', async () => {
     server = await startServer();
     const response = await fetch(`${server.url}/api/health`);
     expect(response.headers.get('strict-transport-security')).toBeNull();
-    expect(response.headers.get('content-security-policy')).not.toContain('upgrade-insecure-requests');
+    const csp = response.headers.get('content-security-policy') ?? '';
+    expect(csp).not.toContain('upgrade-insecure-requests');
+    // youtube-player loads the API over the page's scheme, i.e. http: here.
+    expect(csp).toContain('http://www.youtube.com');
   });
 
   it('serves the SPA with a history fallback when a build is present', async () => {

@@ -22,6 +22,8 @@ const EnvSchema = z.object({
         .filter(Boolean),
     ),
   WEB_DIST_DIR: z.string().min(1).optional(),
+  /** Enables the multi-instance setup (Redis room store, rate limits and Socket.IO adapter). */
+  REDIS_URL: z.url({ protocol: /^rediss?$/ }).optional(),
 });
 
 export interface AppConfig {
@@ -35,6 +37,8 @@ export interface AppConfig {
 
 export interface ServerConfig extends AppConfig {
   readonly databaseUrl: string;
+  /** Absent: single-instance, in-memory strategies. */
+  readonly redisUrl: string | undefined;
   readonly auth: {
     readonly secret: string;
     readonly baseUrl: string;
@@ -56,6 +60,7 @@ export const loadConfig = (env: Readonly<Record<string, string | undefined>>): S
     publicOrigin,
     webDistDir: e.WEB_DIST_DIR,
     databaseUrl: e.DATABASE_URL,
+    redisUrl: e.REDIS_URL,
     auth: {
       secret: e.BETTER_AUTH_SECRET,
       baseUrl: e.BETTER_AUTH_URL ?? publicOrigin,

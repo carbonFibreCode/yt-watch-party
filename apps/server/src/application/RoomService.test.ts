@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GRACE_PERIOD_MS, REQUEST_TTL_MS } from '@watchparty/shared';
+import { CAS_MAX_RETRIES, GRACE_PERIOD_MS, REQUEST_TTL_MS } from '@watchparty/shared';
 import { DomainError } from '../domain/DomainError';
 import type { RoomSnapshot } from '../domain/snapshot';
 import { InMemoryRoomRepository } from '../infrastructure/repositories/InMemoryRoomRepository';
@@ -111,7 +111,7 @@ describe('RoomService', () => {
     });
 
     it('gives up with CONFLICT after the retry budget', async () => {
-      const { service } = setup(new ContendedRepository(10), ['K7M2QX']);
+      const { service } = setup(new ContendedRepository(CAS_MAX_RETRIES), ['K7M2QX']);
       await service.create('Movie night', HOST);
       await expect(service.mutate('K7M2QX', () => undefined)).rejects.toEqual(new DomainError('CONFLICT'));
     });

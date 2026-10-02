@@ -22,6 +22,8 @@ import { RequestExpiryWatcher } from './application/RequestExpiryWatcher';
 import { RoomHousekeeping } from './application/RoomHousekeeping';
 import { RoomService } from './application/RoomService';
 import { VideoResolver } from './application/VideoResolver';
+import { localBackplane } from './infrastructure/backplane';
+import type { Backplane } from './infrastructure/backplane';
 import type { AppConfig } from './infrastructure/config';
 import { createHttpApp } from './infrastructure/http/app';
 import { createRoomsRouter } from './infrastructure/http/routes/rooms';
@@ -41,6 +43,8 @@ export interface ComposeOptions {
   readonly logger: PinoLogger;
   readonly sessions: SessionResolver;
   readonly persistence: Persistence;
+  /** Cross-instance fan-out and shared rate limits; defaults to the single-instance strategy. */
+  readonly backplane?: Backplane;
   /** better-auth's Node handler, mounted at /api/auth (absent in socket-only tests). */
   readonly authHandler?: RequestHandler;
   /** Overrides for tests; production uses the real implementations. */
@@ -65,10 +69,11 @@ export interface ComposedApp {
  */
 export const composeApp = (options: ComposeOptions): ComposedApp => {
   const { config, logger, sessions, persistence } = options;
+  const backplane = options.backplane ?? localBackplane;
   const clock = options.clock ?? new SystemClock();
   const scheduler = options.scheduler ?? new TimerScheduler(logger);
   const ids = new NanoIdGenerator();
-  const limiter = new RateLimiterFlexibleAdapter();
+  const limiter = new RateLimiterFlexibleAdapter(backplane.limiterFactory);
   const videos = new VideoResolver(options.videoMetadata ?? new OEmbedMetadataProvider(logger));
   const rooms = new RoomService(persistence.rooms, clock, ids);
 
@@ -76,7 +81,7 @@ export const composeApp = (options: ComposeOptions): ComposedApp => {
     logger,
     clock,
     startedAt: clock.now(),
-    healthChecks: persistence.healthChecks,
+    healthChecks: [...persistence.healthChecks, ...backplane.healthChecks],
     webDistDir: config.webDistDir,
     production: config.nodeEnv === 'production',
     ...(options.authHandler === undefined ? {} : { authHandler: options.authHandler }),
@@ -85,6 +90,7 @@ export const composeApp = (options: ComposeOptions): ComposedApp => {
   const httpServer = createServer(httpApp);
   const io: IoServer = new Server(httpServer, {
     serveClient: false,
+    ...(backplane.adapter === undefined ? {} : { adapter: backplane.adapter }),
     transports: ['websocket'],
     maxHttpBufferSize: MAX_HTTP_BUFFER_BYTES,
     pingInterval: SOCKET_PING_INTERVAL_MS,

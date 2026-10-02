@@ -173,8 +173,10 @@ watch-party/
 ├─ package.json                  # pnpm workspaces, root scripts (dev, build, test, lint, typecheck)
 ├─ pnpm-workspace.yaml
 ├─ tsconfig.base.json            # strict, noUncheckedIndexedAccess, exactOptionalPropertyTypes
-├─ docker-compose.yml            # postgres, redis, server×2, nginx (scale demo)
-├─ infra/nginx.conf              # websocket upgrade + least_conn
+├─ docker-compose.yml            # postgres, redis; `scale` profile: server×2 + nginx
+├─ Dockerfile                    # server + SPA image for the scale profile
+├─ infra/nginx.conf              # websocket upgrade + least_conn, worker_connections 16k
+├─ docs/loadtest.md              # results of tools/loadtest
 ├─ tools/loadtest/               # socket.io-client load generator + report
 ├─ .github/workflows/ci.yml
 ├─ packages/
@@ -220,7 +222,8 @@ watch-party/
 │  │  │  ├─ config.ts            # zod env parsing
 │  │  │  ├─ logger.ts, metrics.ts
 │  │  │  ├─ db/                  # drizzle client, schema.ts, migrations/
-│  │  │  ├─ redis/               # client factory, lua/cas.lua
+│  │  │  ├─ redis/               # client factory, LuaScript (EVALSHA + NOSCRIPT reload)
+│  │  │  ├─ backplane.ts         # Strategy: Socket.IO adapter + limiter store (memory | Redis)
 │  │  │  ├─ repositories/        # InMemoryRoomRepository, RedisRoomRepository, PostgresRoomRepository,
 │  │  │  │                       # TieredRoomRepository, PgChatRepository, PgMembershipRepository
 │  │  │  ├─ auth/                # better-auth instance, BetterAuthSessionResolver
@@ -590,15 +593,15 @@ interface MembershipRepository { touch(roomId, userId, role): Promise<void>; rec
 | Implementation | Used when | Notes |
 |---|---|---|
 | `InMemoryRoomRepository` | tests, local dev without Redis | `Map<id, {json, version}>`. CAS is a version compare |
-| `RedisRoomRepository` | `REDIS_URL` set | Key `wp:room:{id}` holds JSON incl. `version`. CAS runs as a **Lua script** (atomic). TTL `HOT_ROOM_TTL` is refreshed on write |
+| `RedisRoomRepository` | `REDIS_URL` set | Hash `wp:room:{id}` with fields `v` (version) and `data` (encoded snapshot), so CAS compares versions **without decoding JSON**. `create` and CAS are **Lua scripts** (atomic), run by SHA via `LuaScript` (EVALSHA, reloads on `NOSCRIPT`). Reads and writes refresh the `HOT_ROOM_TTL` |
 | `PostgresRoomRepository` | cold store | `rooms.snapshot jsonb`, `rooms.version int` |
-| `TieredRoomRepository(hot, cold, flusher)` | production wiring (Decorator) | **Read-through:** hot miss → cold load → seed hot with `SET NX`. **Write-through on `create`**, so a shared link works immediately. **Write-behind on CAS:** marks the room dirty for `SnapshotFlusher` |
+| `TieredRoomRepository(hot, cold, flusher)` | production wiring (Decorator) | **Read-through:** hot miss → cold load → seed hot with `create` (only if absent; on a lost race, use the winner's copy). **Write-through on `create`**, so a shared link works immediately. **Write-behind on CAS:** marks the room dirty for `SnapshotFlusher` |
 
 ```lua
--- redis/lua/cas.lua: KEYS[1]=room key, ARGV[1]=expectedVersion, ARGV[2]=newJson, ARGV[3]=ttlSeconds
-local cur = redis.call('GET', KEYS[1])
-if cur and cjson.decode(cur).version ~= tonumber(ARGV[1]) then return 0 end
-redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[3])
+-- RedisRoomRepository COMPARE_AND_SET: KEYS[1]=room hash, ARGV = expected, next version, json, ttl
+if redis.call('HGET', KEYS[1], 'v') ~= ARGV[1] then return 0 end   -- also 0 when the room is gone
+redis.call('HSET', KEYS[1], 'v', ARGV[2], 'data', ARGV[3])
+redis.call('EXPIRE', KEYS[1], ARGV[4])
 return 1
 ```
 
@@ -1127,16 +1130,25 @@ Request bodies are validated by the same zod schemas from `shared/contract/http.
    - Any instance can handle any event.
 2. **Fan-out.** `@socket.io/redis-streams-adapter` forwards broadcasts between instances. `fetchSockets`, `socketsJoin`, and `disconnectSockets` work cluster-wide.
 3. **No sticky sessions.** Clients use `transports: ['websocket']`, so there's no HTTP long-polling and no stickiness requirement. nginx uses `least_conn` with WebSocket upgrade headers.
-4. **Consistency.** Per-room `async-mutex` (in-process) plus Lua CAS (cross-process) give linearizable room mutations. Conflicts are retried up to `CAS_MAX_RETRIES`.
+4. **Consistency.** Per-room `async-mutex` (in-process) plus Lua CAS (cross-process) give linearizable room mutations.
+   - **Retries are immediate, up to `CAS_MAX_RETRIES` = 20.** Across instances, a loser races the winner's *next queued* mutation, which is roughly a fair coin toss, so each attempt halves the odds of failing (about 1e-6 at 20 with two instances).
+   - **Not backoff.** While a backing-off loser sleeps, the other instance keeps committing from its queue, and the loser wakes mid-cycle, where it always loses.
+   - **Measured.** The original cap of 3 failed about 3% of joins in a two-instance join storm; at 20, 100 users joining one room at once all succeed (`docs/loadtest.md`).
 5. **Cheap broadcasts.** One `sync_state` per change (~250 bytes). There's no periodic state heartbeat because clients self-correct from server-time anchors, so the cost of 50 users per room grows with *changes*, not with time.
 6. **Connection pooling.** Our own `pg.Pool({ max: DB_POOL_MAX })` against Neon's direct endpoint. A single shared node-redis client handles commands, and the adapter duplicates it for blocking reads.
+   - **The `Backplane` Strategy** (`infrastructure/backplane.ts`) groups the adapter, the limiter store and the Redis health check: `localBackplane`, or `createRedisBackplane(redis, prefix)`.
+   - **The adapter is created lazily.** `createAdapter` opens its reader connections immediately, so the backplane defers it until Socket.IO asks. The wrapper must be a plain `function`, because Socket.IO calls it with `new`.
+   - **Limiter fallback.** Each Redis limiter has an in-memory `insuranceLimiter`, so a Redis outage degrades rate limiting to per-instance instead of failing every command.
+   - **Isolation.** `prefix` namespaces every key and the stream, so test files run in parallel against one Redis. A shared stream would make each test server wait for the others' heartbeats in `fetchSockets`.
+   - **Ordering.** Through the adapter, even local delivery follows the stream write, so a broadcast can reach the sender after its own ack. Clients order states by `rev`, so nothing depends on ack-before-broadcast.
 7. **Load test** (`tools/loadtest`):
    - N virtual users each sign in anonymously over HTTP to get a cookie, then connect and `join_room`, spread over R rooms.
    - One controller per room issues `seek` every 2s.
    - Every client records `receivedAt − serverTime` (same host, so clocks agree).
    - Output: p50/p95/p99 fan-out latency, connection errors, and CAS retry histogram from `/metrics`.
    - Scenarios: 1×100 smoke, 20×50 = 1,000, 100×50 = 5,000 (stretch).
-   - Run against `docker compose up --scale server=2`. Results go into README.
+   - Run against `docker compose --profile scale up -d --build` (two replicas behind nginx).
+   - **Results** (`docs/loadtest.md`): 5,000/5,000 users joined, 150,000/150,000 deliveries, fan-out p99 6 ms, and sockets split 2,502/2,498 between the replicas. Two-instance behavior (cross-instance kick, sync and presence) is also tested in CI by `test/cluster.redis.test.ts`.
 
 ---
 
@@ -1249,13 +1261,13 @@ CI (GitHub Actions) runs `pnpm lint && pnpm typecheck && pnpm test` with a Redis
 | App (SPA + API + WS) | **Render Web Service** (Node) | Build/start commands: see the `render.yaml` row below. Migrations run at boot under an advisory lock. Health: `/api/health` |
 | Config as code | `render.yaml` Blueprint | Build `corepack pnpm install --frozen-lockfile --prod=false && corepack pnpm build`: Corepack runs the pnpm pinned in `package.json` without `corepack enable`, which fails on Render because `/usr/bin` is read-only, and dev dependencies are needed to build even with `NODE_ENV=production`. Start `node apps/server/dist/main.mjs` (no package manager at runtime). Health `/api/health`. `BETTER_AUTH_SECRET` is generated by Render; `PUBLIC_ORIGIN` and `DATABASE_URL` are entered once |
 | Postgres | **Neon** | **Direct** connection string → `DATABASE_URL` (see the env table for why not the pooler) |
-| Redis | **Render Key Value** (same region, internal URL) | `REDIS_URL` → enables streams adapter, Redis repo, Redis limiter |
+| Redis | **Render Key Value** `watch-party-redis` (free, private network only, `maxmemoryPolicy: volatile-lru`) | Declared in `render.yaml`. Its `connectionString` becomes `REDIS_URL` → enables the streams adapter, Redis repo and Redis limiter. `volatile-lru`: rooms (archived in Postgres), limiter buckets and recovery sessions all have TTLs and may be evicted, while the adapter's stream has none and never is |
 
 - **One origin** means no CORS and first-party cookies, which avoids third-party-cookie and Safari ITP problems with a split frontend/backend.
 - **Free-tier sleep:** documented in README, plus an external uptime ping during the review window.
 - **Fallback platform:** Railway with the same Dockerfile-less Nixpacks build and the same env vars.
 - **Local:** `docker compose up -d` (Postgres on host port **5433**, Redis on **6380**, chosen to avoid clashing with locally installed services on the default ports), then `pnpm dev`. That runs Vite on :5173 proxying `/api` and `/socket.io` to :3000, so cookies stay same-origin in dev too.
-- **Scale demo:** `docker compose --profile scale up --scale server=2` with nginx on :8080.
+- **Scale demo:** `docker compose --profile scale up -d --build` runs two server replicas behind nginx on :8080. They run with `NODE_ENV=development`, because production-only behavior (HSTS, upgrade-insecure-requests, secure cookies, per-IP guest sign-in limits) assumes TLS and a public edge. For the same reason, the CSP allows the `http:` YouTube player API outside production (`youtube-player` loads it with the page's scheme).
 
 ---
 
@@ -1356,7 +1368,7 @@ sequenceDiagram
 | `END_TOLERANCE_S` | 3 | |
 | `CLOCK_SYNC_INTERVAL_MS` | 60 000 | |
 | `ACK_TIMEOUT_MS` | 5 000 | |
-| `CAS_MAX_RETRIES` | 3 | |
+| `CAS_MAX_RETRIES` | 20 | Immediate retries; see SP-19 §4 |
 | `HOT_ROOM_TTL_S` | 86 400 | |
 | `SNAPSHOT_FLUSH_MS` | 5 000 | |
 | `CHAT_MAX_LEN` / `CHAT_HISTORY_LIMIT` | 500 / 50 | |

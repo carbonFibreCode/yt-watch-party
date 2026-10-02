@@ -4,13 +4,16 @@ import { SHUTDOWN_TIMEOUT_MS } from '@watchparty/shared';
 import { composeApp } from './compose';
 import { createAuth } from './infrastructure/auth/auth';
 import { BetterAuthSessionResolver } from './infrastructure/auth/BetterAuthSessionResolver';
+import { createRedisBackplane, localBackplane } from './infrastructure/backplane';
 import { loadConfig } from './infrastructure/config';
 import { createDatabase } from './infrastructure/db/client';
 import { createLogger } from './infrastructure/logger';
 import { createPostgresPersistence } from './infrastructure/persistence';
+import { connectRedis } from './infrastructure/redis/client';
+import { RedisRoomRepository } from './infrastructure/repositories/RedisRoomRepository';
 
 /**
- * Process entry: config → database (migrate) → auth → compose → listen → graceful shutdown
+ * Process entry: config → database (migrate) → redis? → auth → compose → listen → graceful shutdown
  * (LLD SP-20). Paths are resolved from this file, which sits one level under apps/server in both
  * development (src/) and production (dist/).
  */
@@ -28,7 +31,16 @@ const fail = (message: string) => (error: unknown) => {
 const database = createDatabase(config.databaseUrl, MIGRATIONS_DIR);
 await database.migrate().catch(fail('database migration failed'));
 
-const persistence = createPostgresPersistence(database, logger);
+// REDIS_URL switches every shared-state strategy at once (LLD SP-19); without it, one instance.
+const redis =
+  config.redisUrl === undefined
+    ? null
+    : await connectRedis(config.redisUrl, logger).catch(fail('redis connection failed'));
+const persistence = createPostgresPersistence(
+  database,
+  logger,
+  redis === null ? undefined : new RedisRoomRepository(redis),
+);
 const auth = createAuth({
   db: database.db,
   secret: config.auth.secret,
@@ -45,6 +57,7 @@ const app = composeApp({
   config,
   logger,
   persistence,
+  backplane: redis === null ? localBackplane : createRedisBackplane(redis),
   sessions: new BetterAuthSessionResolver(auth),
   authHandler: toNodeHandler(auth),
 });
@@ -61,6 +74,7 @@ const shutdown = (signal: string): void => {
   force.unref();
   app
     .close()
+    .then(() => redis?.quit())
     .then(() => database.close())
     .then(
       () => process.exit(0),

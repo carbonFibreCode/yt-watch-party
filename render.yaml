@@ -1,6 +1,16 @@
 # Render Blueprint (LLD SP-23): one Node web service serving the SPA, REST API and WebSockets
-# from a single origin. Postgres is Neon (DATABASE_URL); Redis is added in Phase 12.
+# from a single origin, plus a Key Value (Redis) instance for shared room state, rate limits and
+# cross-instance fan-out (LLD SP-19). Postgres is Neon (DATABASE_URL).
 services:
+  - type: keyvalue
+    name: watch-party-redis
+    plan: free
+    # Private network only (same region as the web service).
+    ipAllowList: []
+    # Rooms (archived in Postgres), rate-limit buckets and recovery sessions all carry TTLs and may
+    # be evicted under memory pressure; the Socket.IO stream has none, so it never is.
+    maxmemoryPolicy: volatile-lru
+
   - type: web
     name: watch-party
     runtime: node
@@ -33,3 +43,9 @@ services:
         sync: false
       - key: BETTER_AUTH_SECRET
         generateValue: true
+      # Switches every shared-state strategy to Redis (Lua-CAS room store, rate limits, adapter).
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: watch-party-redis
+          property: connectionString

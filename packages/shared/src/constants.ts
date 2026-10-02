@@ -69,7 +69,12 @@ export const SOCKET_PING_TIMEOUT_MS = 5_000;
 export const MAX_HTTP_BUFFER_BYTES = 16 * 1024;
 
 // ---------- persistence ----------
-export const CAS_MAX_RETRIES = 3;
+/**
+ * Immediate CAS retries. Across instances a loser races the winner's next queued mutation as a
+ * fair coin toss, so each attempt halves the odds of failing (2 instances: ~1e-6 at 20). Backoff
+ * would hurt: the other instance keeps committing while the loser sleeps (LLD SP-19 §4).
+ */
+export const CAS_MAX_RETRIES = 20;
 export const HOT_ROOM_TTL_S = 86_400;
 export const SNAPSHOT_FLUSH_MS = 5_000;
 

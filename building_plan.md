@@ -337,16 +337,25 @@ P0 Scaffold ─► P1 Shared Contract ─► P2 Domain ─► P3 Application ─
 **Goal:** the bonus scaling story, with evidence (LLD SP-19).
 
 **Tasks**
-- [ ] node-redis client factory. `RedisRoomRepository` + `lua/cas.lua`. `Tiered(Redis, Postgres)` wiring.
-- [ ] Run the **same repository contract suite** against Redis (CI Redis service container)
-- [ ] `RateLimiterRedis` strategy. `@socket.io/redis-streams-adapter` strategy. All selected by `REDIS_URL`.
-- [ ] docker-compose `scale` profile: `server` ×2 + `infra/nginx.conf` (`least_conn`, WS upgrade)
-- [ ] `tools/loadtest`: guest sign-in per virtual user, rooms × users, fan-out latency p50/p95/p99, error counts
+- [x] node-redis client factory. `RedisRoomRepository` + Lua CAS (inline scripts run by `LuaScript`, EVALSHA). `Tiered(Redis, Postgres)` wiring.
+- [x] Run the **same repository contract suite** against Redis (CI Redis service container)
+- [x] `RateLimiterRedis` strategy. `@socket.io/redis-streams-adapter` strategy. All selected by `REDIS_URL` (the `Backplane` Strategy).
+- [x] docker-compose `scale` profile: `server` ×2 + `infra/nginx.conf` (`least_conn`, WS upgrade)
+- [x] `tools/loadtest`: guest sign-in per virtual user, rooms × users, fan-out latency p50/p95/p99, error counts
 - [ ] Enable `REDIS_URL` in prod and re-run the prod smoke test
 
 **Exit Criteria**
 - Two instances: a user on instance A kicks a user on instance B and the kick works. Sync works across instances.
 - Load test of 1,000 users (20 rooms × 50) completes with results saved to `docs/loadtest.md`
+
+**Done.**
+- **Two instances in CI:** `test/cluster.redis.test.ts` covers shared state and fan-out, a host on A kicking a user on B, and presence counting a user's tabs on both instances.
+- **E2E:** the full Playwright suite passes against the two-replica stack (`E2E_BASE_URL=http://localhost:8080`).
+- **Load test** (`docs/loadtest.md`): 1,000 and 5,000 users, every delivery received, fan-out p99 6 ms.
+- **Found and fixed:**
+  - Cross-instance join storms hit `CONFLICT` about 3% of the time → immediate CAS retries, cap 3 → 20.
+  - nginx `worker_connections` too low for 5,000 sockets → 16k.
+  - The YouTube API was blocked by the CSP on plain-HTTP deployments → `http:` allowed outside production.
 
 **Commit:** `feat(scale): Redis room store with Lua CAS, streams adapter, load test`
 

@@ -26,8 +26,18 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     env:
       TEST_DATABASE_URL: postgres://watchparty:watchparty@localhost:5433/watchparty_test
+      TEST_REDIS_URL: redis://localhost:6380
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6

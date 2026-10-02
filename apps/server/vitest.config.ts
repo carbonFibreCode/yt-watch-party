@@ -4,6 +4,6 @@ export default defineProject({
   test: {
     name: 'server',
     environment: 'node',
-    exclude: ['**/node_modules/**', '**/dist/**', '**/*.pg.test.ts'],
+    exclude: ['**/node_modules/**', '**/dist/**', '**/*.pg.test.ts', '**/*.redis.test.ts'],
   },
 });
