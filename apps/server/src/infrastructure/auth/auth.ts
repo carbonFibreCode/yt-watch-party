@@ -1,7 +1,12 @@
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { anonymous } from 'better-auth/plugins';
-import { AUTH_COOKIE_CACHE_S, MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from '@watchparty/shared';
+import {
+  AUTH_COOKIE_CACHE_S,
+  GUEST_SIGN_IN_LIMIT,
+  MAX_PASSWORD_LENGTH,
+  MIN_PASSWORD_LENGTH,
+} from '@watchparty/shared';
 import type { Logger, MembershipRepository } from '../../application/ports';
 import type { Db } from '../db/client';
 import { authSchema } from '../db/schema';
@@ -12,6 +17,10 @@ export interface AuthOptions {
   readonly baseUrl: string;
   readonly trustedOrigins: readonly string[];
   readonly secureCookies: boolean;
+  /** better-auth's per-IP rate limiting (on in production). */
+  readonly rateLimit: boolean;
+  /** Headers that carry the real client IP; behind a proxy chain, the one the edge sets. */
+  readonly clientIpHeaders: readonly string[];
   readonly memberships: MembershipRepository;
   readonly logger: Logger;
 }
@@ -38,7 +47,18 @@ export const createAuth = (options: AuthOptions) =>
       maxPasswordLength: MAX_PASSWORD_LENGTH,
     },
     session: { cookieCache: { enabled: true, maxAge: AUTH_COOKIE_CACHE_S } },
-    advanced: { useSecureCookies: options.secureCookies },
+    rateLimit: {
+      enabled: options.rateLimit,
+      // Guests on one network share an IP; password sign-in keeps better-auth's strict default.
+      customRules: {
+        '/sign-in/anonymous': { window: GUEST_SIGN_IN_LIMIT.windowS, max: GUEST_SIGN_IN_LIMIT.max },
+      },
+    },
+    advanced: {
+      useSecureCookies: options.secureCookies,
+      // Without a resolvable client IP, better-auth falls back to ONE bucket shared by every user.
+      ipAddress: { ipAddressHeaders: [...options.clientIpHeaders] },
+    },
     telemetry: { enabled: false },
     plugins: [
       anonymous({

@@ -83,6 +83,8 @@ export const RECENT_ROOMS_LIMIT = 10;
 export const AUTH_COOKIE_CACHE_S = 300;
 export const MIN_PASSWORD_LENGTH = 8;
 export const MAX_PASSWORD_LENGTH = 128;
+/** Guest sign-ins per client IP: generous enough for a group joining from one Wi-Fi network. */
+export const GUEST_SIGN_IN_LIMIT = { max: 30, windowS: 60 } as const;
 
 // ---------- process ----------
 export const SHUTDOWN_TIMEOUT_MS = 10_000;

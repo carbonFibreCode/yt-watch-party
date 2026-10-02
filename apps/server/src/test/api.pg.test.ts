@@ -3,7 +3,7 @@ import { toNodeHandler } from 'better-auth/node';
 import { eq } from 'drizzle-orm';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { CreateRoomResponse, RoomPreview, RoomSummary } from '@watchparty/shared';
-import { RATE_LIMITS } from '@watchparty/shared';
+import { GUEST_SIGN_IN_LIMIT, RATE_LIMITS } from '@watchparty/shared';
 import { RecordingLogger } from '../application/test/fakes';
 import { createAuth } from '../infrastructure/auth/auth';
 import type { Auth } from '../infrastructure/auth/auth';
@@ -20,7 +20,7 @@ const logger = new RecordingLogger();
 let server: TestServer;
 let auth: Auth;
 
-const boot = async (): Promise<TestServer> => {
+const boot = async (rateLimit = false): Promise<TestServer> => {
   const persistence = createPostgresPersistence(database, logger);
   auth = createAuth({
     db: database.db,
@@ -28,6 +28,8 @@ const boot = async (): Promise<TestServer> => {
     baseUrl: ORIGIN,
     trustedOrigins: [ORIGIN],
     secureCookies: false,
+    rateLimit,
+    clientIpHeaders: ['cf-connecting-ip', 'x-forwarded-for'],
     memberships: persistence.memberships,
     logger,
   });
@@ -184,6 +186,42 @@ describe('REST + auth', () => {
       { roomId, lastRole: 'host' },
     ]);
     expect(await database.db.select().from(user).where(eq(user.id, guestRow!.id))).toEqual([]);
+  });
+});
+
+describe('auth rate limiting (production settings)', () => {
+  const guestSignIn = (ip: string) =>
+    fetch(`${server.url}/api/auth/sign-in/anonymous`, {
+      method: 'POST',
+      headers: { origin: ORIGIN, 'content-type': 'application/json', 'cf-connecting-ip': ip },
+      body: '{}',
+    });
+
+  it('lets a whole group on one network sign in as guests, then limits', async () => {
+    await server.close();
+    server = await boot(true);
+    for (let i = 0; i < GUEST_SIGN_IN_LIMIT.max; i += 1) {
+      expect((await guestSignIn('203.0.113.7')).status).toBe(200);
+    }
+    expect((await guestSignIn('203.0.113.7')).status).toBe(429);
+    // Buckets are per client IP (from the trusted edge header), not one bucket for everyone.
+    expect((await guestSignIn('198.51.100.9')).status).toBe(200);
+  });
+
+  it('keeps password sign-in strict', async () => {
+    await server.close();
+    server = await boot(true);
+    const attempt = () =>
+      fetch(`${server.url}/api/auth/sign-in/email`, {
+        method: 'POST',
+        headers: { origin: ORIGIN, 'content-type': 'application/json', 'cf-connecting-ip': '203.0.113.8' },
+        body: JSON.stringify({ email: 'nobody@example.test', password: 'wrong-password' }),
+      });
+    const statuses = [];
+    for (let i = 0; i < 5; i += 1) {
+      statuses.push((await attempt()).status);
+    }
+    expect(statuses).toContain(429);
   });
 });
 

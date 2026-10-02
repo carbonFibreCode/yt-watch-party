@@ -16,7 +16,11 @@ describe('loadConfig', () => {
       publicOrigin: 'https://watch.example.com',
       webDistDir: undefined,
       databaseUrl: REQUIRED.DATABASE_URL,
-      auth: { secret: REQUIRED.BETTER_AUTH_SECRET, baseUrl: 'https://watch.example.com' },
+      auth: {
+        secret: REQUIRED.BETTER_AUTH_SECRET,
+        baseUrl: 'https://watch.example.com',
+        clientIpHeaders: ['x-forwarded-for'],
+      },
     });
   });
 
@@ -29,13 +33,14 @@ describe('loadConfig', () => {
         LOG_LEVEL: 'warn',
         WEB_DIST_DIR: '/srv/web',
         BETTER_AUTH_URL: 'https://auth.example.com',
+        CLIENT_IP_HEADERS: ' CF-Connecting-IP , x-forwarded-for ',
       }),
     ).toMatchObject({
       nodeEnv: 'production',
       port: 8080,
       logLevel: 'warn',
       webDistDir: '/srv/web',
-      auth: { baseUrl: 'https://auth.example.com' },
+      auth: { baseUrl: 'https://auth.example.com', clientIpHeaders: ['cf-connecting-ip', 'x-forwarded-for'] },
     });
   });
 

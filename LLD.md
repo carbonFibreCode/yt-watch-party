@@ -369,6 +369,10 @@ Brief-mandated event names are kept **verbatim**. `change_video` takes a `url` i
    - better-auth's `session.cookieCache` (5 min) avoids a DB round-trip per handshake.
 4. **Display name trust.** The server always takes the name from the session, never from payloads. To change their name, the client calls better-auth's `updateUser({ name })` and then (re)joins; `join()` updates the member's name from the session.
 5. **Authorization identity** is `socket.data.user.id`, everywhere.
+6. **Auth rate limiting** (better-auth's limiter, enabled in production via `createAuth({ rateLimit })`):
+   - **Guest sign-ins** get a custom rule of `GUEST_SIGN_IN_LIMIT` (30/min per client IP), because a group on one Wi-Fi shares an IP.
+   - **Email/password** keeps better-auth's strict default (3/10 s) against brute force.
+   - **Client IP:** better-auth reads it from `advanced.ipAddress.ipAddressHeaders` = `CLIENT_IP_HEADERS`. It trusts `X-Forwarded-For` only when the header holds exactly one address, and **when it can't resolve an IP it puts every user in one shared bucket**. On Render (behind Cloudflare) the trusted header is `cf-connecting-ip`, which Cloudflare sets and overwrites. Found in production: guests got "Too many requests"; covered by a Postgres test with production settings.
 
 **SOLID:** auth is a port (DIP). Tests use `StaticSessionResolver` (reads an `x-test-user` header), which keeps integration tests fast and deterministic.
 
@@ -1135,6 +1139,7 @@ Request bodies are validated by the same zod schemas from `shared/contract/http.
 | `REDIS_URL` | no | if absent → in-memory repo, limiter, and adapter (single instance) |
 | `BETTER_AUTH_SECRET` | yes | 32+ random bytes |
 | `BETTER_AUTH_URL` | no | defaults to `PUBLIC_ORIGIN` |
+| `CLIENT_IP_HEADERS` | no | comma-separated, default `x-forwarded-for`. On Render: `cf-connecting-ip` (see SP-2 §6) |
 | `METRICS_TOKEN` | no | enables `/metrics` |
 | `LOG_LEVEL` | no | `info` |
 
