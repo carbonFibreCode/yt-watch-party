@@ -47,7 +47,11 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
+      # Type-aware lint builds a TypeScript program per workspace project (~2.9 GB peak). Private-repo
+      # runners have 7 GB, so Node's default heap (~2 GB there) is too small.
       - run: pnpm lint
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
