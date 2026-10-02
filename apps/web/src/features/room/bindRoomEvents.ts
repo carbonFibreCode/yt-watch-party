@@ -7,7 +7,7 @@ import type { RoomStore } from './store';
 /**
  * The single place server → client events are handled (LLD SP-14). Updates the store, adds
  * system lines to the chat and raises toasts for things that concern the current user.
- * Returns an unbind function. Reactions are handled by the reactions feature (LLD SP-15).
+ * Returns an unbind function.
  */
 export const bindRoomEvents = (
   socket: RoomSocket,
@@ -20,7 +20,7 @@ export const bindRoomEvents = (
     state().participants.find((p) => p.userId === userId)?.name ?? 'Someone';
   const isSelf = (userId: string): boolean => state().selfId === userId;
 
-  const h: Required<Omit<ServerToClientEvents, 'reaction'>> = {
+  const h: Required<ServerToClientEvents> = {
     sync_state: (playback) => {
       state().applyPlayback(playback);
     },
@@ -82,6 +82,9 @@ export const bindRoomEvents = (
     chat_message: (message) => {
       state().addChat(message);
     },
+    reaction: (reaction) => {
+      state().addReaction(reaction);
+    },
   };
 
   // Registered one by one: Socket.IO's listener types cannot be forwarded generically without casts.
@@ -97,6 +100,7 @@ export const bindRoomEvents = (
   socket.on('action_requested', h.action_requested);
   socket.on('request_resolved', h.request_resolved);
   socket.on('chat_message', h.chat_message);
+  socket.on('reaction', h.reaction);
 
   return () => {
     socket.off('sync_state', h.sync_state);
@@ -111,5 +115,6 @@ export const bindRoomEvents = (
     socket.off('action_requested', h.action_requested);
     socket.off('request_resolved', h.request_resolved);
     socket.off('chat_message', h.chat_message);
+    socket.off('reaction', h.reaction);
   };
 };

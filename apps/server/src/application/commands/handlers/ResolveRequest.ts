@@ -8,7 +8,7 @@ import type { ExecuteArgs, RoomCommandDeps } from '../RoomCommand';
 
 /**
  * Staff approve or reject a request. On approval the action runs through the same
- * RequestedActions.apply as a direct command, as the approver, in the same commit (LLD SP-10).
+ * RequestedActions.apply as a direct command, credited to the requester, in the same commit (LLD SP-10).
  */
 export class ResolveRequest extends SimpleRoomCommand<'resolve_request'> {
   readonly event = 'resolve_request';
@@ -30,7 +30,7 @@ export class ResolveRequest extends SimpleRoomCommand<'resolve_request'> {
     const request = room.resolveRequest(actor.userId, input.requestId, input.approve, now);
     if (input.approve) {
       assertCapability(actor, 'playback.control');
-      this.actions.apply(room, request.action, actor, now);
+      this.actions.apply(room, request.action, request.requester, now);
     }
     return EMPTY_ACK;
   }

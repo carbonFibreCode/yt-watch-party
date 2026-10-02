@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { ReactElement } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
+import { ReactionMarkers } from '@/features/reactions/ReactionMarkers';
 import { useRoom } from '@/features/room/RoomContext';
 import { formatDuration } from '@/lib/format';
 import { ControlHint } from './ControlHint';
@@ -29,7 +30,7 @@ export function ControlBar({ command, duration }: ControlBarProps): ReactElement
   const verb = playing ? 'Pause' : 'Play';
 
   return (
-    <div className="bg-card flex items-center gap-3 rounded-xl border px-3 py-2">
+    <div className="bg-card flex items-center gap-3 rounded-xl border px-3 pt-6 pb-2">
       <ControlHint hint={hintFor(mode, verb, `Ask to ${verb.toLowerCase()}`)}>
         <Button
           size="icon"
@@ -44,25 +45,27 @@ export function ControlBar({ command, duration }: ControlBarProps): ReactElement
       <span className="text-muted-foreground w-28 shrink-0 text-center text-xs tabular-nums" aria-live="off">
         {formatDuration(shown)} / {duration === null ? '–:––' : formatDuration(duration)}
       </span>
-      <Slider
-        aria-label={mode === 'request' ? 'Ask to jump to a time' : 'Seek'}
-        className="flex-1"
-        min={0}
-        max={Math.max(duration ?? 0, 1)}
-        step={1}
-        // Until the length is known the track stays empty rather than looking finished.
-        value={[duration === null ? 0 : Math.min(shown, duration)]}
-        disabled={disabled || duration === null}
-        onValueChange={([value]) => {
-          setScrubbing(value ?? null);
-        }}
-        onValueCommit={([value]) => {
-          setScrubbing(null);
-          if (value !== undefined) {
-            void send({ type: 'seek', time: value });
-          }
-        }}
-      />
+      <div className="relative flex-1">
+        <ReactionMarkers duration={duration} />
+        <Slider
+          aria-label={mode === 'request' ? 'Ask to jump to a time' : 'Seek'}
+          min={0}
+          max={Math.max(duration ?? 0, 1)}
+          step={1}
+          // Until the length is known the track stays empty rather than looking finished.
+          value={[duration === null ? 0 : Math.min(shown, duration)]}
+          disabled={disabled || duration === null}
+          onValueChange={([value]) => {
+            setScrubbing(value ?? null);
+          }}
+          onValueCommit={([value]) => {
+            setScrubbing(null);
+            if (value !== undefined) {
+              void send({ type: 'seek', time: value });
+            }
+          }}
+        />
+      </div>
     </div>
   );
 }

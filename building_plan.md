@@ -317,9 +317,14 @@ P0 Scaffold ─► P1 Shared Contract ─► P2 Domain ─► P3 Application ─
 **Goal:** the bonus social features (LLD SP-15, SP-16).
 
 **Tasks**
-- [ ] `ChatPanel` (history from the join ack, system lines from store events, composer with limit counter)
-- [ ] `ReactionBar`, `ReactionOverlay` (`motion`), `ReactionMarkers` on the scrubber (5s buckets, reset on video change)
-- [ ] `QueuePanel`, `AddToQueueForm`, "play now" (= `change_video` + `queue_remove`), auto-advance on end
+- [x] `ChatPanel` (history from the join ack, system lines from store events, composer with limit counter)
+- [x] `ReactionBar`, `ReactionOverlay` (`motion`), `ReactionMarkers` on the scrubber (5s buckets, reset on video change)
+- [x] `QueuePanel`, `AddToQueueForm`, "play now" (= `change_video` + `queue_remove`), auto-advance on end
+
+**Done.**
+- **Sidebar:** People / Chat (unread badge) / Queue / Requests (staff). A demoted moderator falls back to People.
+- **E2E:** `e2e/social.spec.ts` covers chat both ways with the unread badge and history after a reload, reactions with moment markers in both browsers, and a participant's queue request through approval, then auto-advance after the 19 s "Me at the zoo".
+- **Found and fixed:** approved queue additions were credited to the approver. They are now credited to the requester.
 
 **Exit Criteria:** chat persists across a reload. Reactions show in all tabs with markers. Queue auto-advances, and a participant's `queue_add` goes through approval.
 

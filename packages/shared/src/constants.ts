@@ -80,6 +80,12 @@ export const CHAT_HISTORY_LIMIT = 50;
 export const CHAT_RENDER_LIMIT = 200;
 export const QUEUE_MAX = 50;
 export const REACTION_SET = ['👍', '😂', '😮', '❤️', '🔥', '👏', '😢', '🎉'] as const;
+/** Reactions kept per video for the scrubber's "key moments" markers. */
+export const REACTION_HISTORY_LIMIT = 300;
+/** Reactions within one bucket share a single marker on the scrubber. */
+export const REACTION_BUCKET_S = 5;
+/** How long a floating reaction stays on screen. */
+export const REACTION_FLOAT_MS = 2_500;
 
 // ---------- video ----------
 export const VIDEO_URL_MAX_LEN = 500;

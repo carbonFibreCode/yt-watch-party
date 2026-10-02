@@ -110,6 +110,19 @@ describe('command handlers', () => {
       expect(h.broadcaster.eventTypes().slice(1)).toEqual(['RequestResolved', 'PlaybackChanged']);
     });
 
+    it('credits an approved queue addition to the requester, not the approver', async () => {
+      const { h, roomId, part, host } = await party();
+      await h.send(host, 'change_video', { url: VIDEO_URL });
+      const requested = await h.send(part, 'request_action', {
+        action: { type: 'queue_add', url: 'aaaaaaaaaaa' },
+      });
+      const requestId = (requested as { data: { requestId: string } }).data.requestId;
+      await h.send(host, 'resolve_request', { requestId, approve: true });
+      expect((await h.rooms.read(roomId)).queueItems()).toMatchObject([
+        { addedBy: { userId: PART.userId, name: PART.name } },
+      ]);
+    });
+
     it('rejecting leaves playback untouched', async () => {
       const { h, roomId, part, host } = await party();
       const requested = await h.send(part, 'request_action', { action: { type: 'seek', time: 30 } });

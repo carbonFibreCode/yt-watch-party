@@ -90,7 +90,7 @@ describe('bindRoomEvents', () => {
     expect(systemLines()).toEqual(['host was removed', 'Someone was removed']);
   });
 
-  it('routes playback, queue, requests, chat and kicks to the store', () => {
+  it('routes playback, queue, requests, chat, reactions and kicks to the store', () => {
     const { socket, store } = setup();
     socket.serverEmit('sync_state', playback({ rev: 9, currentTime: 9 }));
     socket.serverEmit('queue_updated', { queue: [] });
@@ -109,8 +109,10 @@ describe('bindRoomEvents', () => {
       text: 'yo',
       createdAt: 6,
     });
+    socket.serverEmit('reaction', { id: 'x1', userId: 'me', name: 'me', emoji: '🔥', videoTime: 4, at: 7 });
     socket.serverEmit('kicked', { roomId: 'K7M2QX', reason: 'removed_by_host' });
     const s = store.getState();
+    expect(s.reactions).toEqual([{ id: 'x1', userId: 'me', name: 'me', emoji: '🔥', videoTime: 4, at: 7 }]);
     expect(s.playback?.rev).toBe(9);
     expect(s.requests).toEqual([]);
     expect(s.chat.at(-1)).toMatchObject({ kind: 'message', text: 'yo' });
@@ -140,7 +142,7 @@ describe('bindRoomEvents', () => {
 
   it('removes every listener on unbind', () => {
     const { socket, unbind } = setup();
-    expect(socket.listenerCount()).toBe(12);
+    expect(socket.listenerCount()).toBe(13);
     unbind();
     expect(socket.listenerCount()).toBe(0);
   });
