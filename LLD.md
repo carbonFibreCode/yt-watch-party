@@ -801,7 +801,7 @@ Each presenter calls `RoomPresenter.participants(room)`, so the participants lis
 | Connection silently dropped (no close frame) | Socket.IO heartbeat (`SOCKET_PING_INTERVAL_MS` 10 s + `SOCKET_PING_TIMEOUT_MS` 5 s) detects it within about 15 s; the defaults (25 s + 20 s) took about 36 s in a real-browser trace. The grace period starts from detection |
 | Instance crashes before its timer fires | **Lazy reaping:** every `mutate` calls `reapAway(now)` first, so the next action in that room reconciles. Correctness never depends on the timer |
 | Explicit `leave_room` (the Leave button) | Immediate `leave()`, no grace. Closing or refreshing the tab does **not** send `leave_room`: the grace period absorbs it, so a refresh doesn't spam leave/join |
-| Kicked user | Banned in the snapshot (`bans`) and removed. Sockets disconnected. Future `join` → `BANNED` |
+| Kicked user | Banned in the snapshot (`bans`) and removed. Their sockets leave the room's channels on every instance (they stay connected, see SP-8). Future `join` → `BANNED` |
 | Room with nobody online | Hot key keeps its TTL. After `HOT_ROOM_TTL` it falls back to the Postgres snapshot. A rejoin later restores it (read-through) |
 | Role memory | `leave`/`reap` store `roleMemory[userId] = role` (moderator/viewer). Rejoin restores the role. A former host returns as moderator if succession happened |
 
@@ -1088,7 +1088,7 @@ The table lives in `shared/constants.ts` as `RATE_LIMITS` (one source for the nu
 - Handshake **origin check** (`allowRequest` compares `Origin` to `PUBLIC_ORIGIN`).
 - Session required for every socket.
 - All IDs come from the server session, never the payload.
-- `helmet` CSP: `frame-src https://www.youtube.com https://www.youtube-nocookie.com; script-src 'self' https://www.youtube.com https://s.ytimg.com; img-src 'self' https://i.ytimg.com data:; connect-src 'self' wss:`.
+- `helmet` CSP: `frame-src https://www.youtube.com https://www.youtube-nocookie.com; script-src 'self' https://www.youtube.com https://s.ytimg.com (+ http://www.youtube.com outside production); img-src 'self' https://i.ytimg.com data:; connect-src 'self' wss: ws:; frame-ancestors 'none'`.
 - better-auth handles password hashing, CSRF on auth routes, and secure cookies (`sameSite=lax`, `secure` in prod).
 - Room capacity is capped at `ROOM_CAPACITY`.
 - No user HTML is ever rendered.
@@ -1224,7 +1224,8 @@ config → logger/metrics → pg pool + drizzle → redis? → repositories (Str
 │   │   ├─ ControlBar    PlayPause · Scrubber(+ReactionMarkers) · TimeLabel · VideoUrlInput · ReactionBar
 │   │   │                (each control: useCan → enabled | "request" mode | disabled+tooltip)
 │   │   └─ NowPlaying    title · thumbnail
-│   └─ RoomSidebar (Tabs: People · Requests [staff] · Chat · Queue [P11]; stacks under the player below lg)
+│   └─ RoomSidebar (Tabs: People · Chat [unread badge] · Queue · Requests [staff]; stacks under the player
+│                  below lg, sticky and viewport-tall from lg)
 │       ├─ ParticipantList → ParticipantRow (avatar initials, name, RoleBadge with icon, presence dot, "you")
 │       │                    └─ MemberActionsMenu: items from pure memberActions(self, target), built on
 │       │                       PermissionPolicy (host: make moderator/participant/viewer, make host [online
@@ -1241,7 +1242,8 @@ config → logger/metrics → pg pool + drizzle → redis? → repositories (Str
 - All interactive elements are keyboard-reachable (Radix).
 - Toasts for social events, inline errors for forms.
 - Skeletons while joining.
-- Mobile: the player stays sticky at the top and the sidebar becomes a sheet.
+- Mobile: the sidebar stacks below the player. Wide screens: the sidebar is sticky and exactly viewport-tall, so chat fills the column.
+- Accessibility is tested, not assumed: axe-core runs in E2E on every room tab in both themes (SP-22).
 
 ---
 
@@ -1256,9 +1258,9 @@ config → logger/metrics → pg pool + drizzle → redis? → repositories (Str
 | Pipeline/Integration | Vitest + `socket.io-client` | In-process server (in-memory strategies, `StaticSessionResolver`). Scenarios: participant `change_video` → `FORBIDDEN`; mod play → all receive `sync_state`; request → approve → executes; kick → `kicked` + rejoin `BANNED`; host leaves → succession; multi-tab presence; rate limit | Real sockets, no network |
 | Client | Vitest + jsdom | `SyncEngine` with `FakePlayer` + `FakeClock`: no seek under threshold, seek over threshold, stale rev ignored, autoplay-blocked detection, load on video change | Pure TS |
 | E2E | Playwright | Two browser contexts: create → join → host pause → guest paused; promote → guest controls enabled; participant request → host approves. Also chaos (network drops), social (chat, reactions, queue) and **accessibility**: axe-core (WCAG 2.1 A/AA) on the landing page, the guest prompt and every room tab, in both themes | Local stack, the two-replica scale stack, or production via `E2E_BASE_URL` |
-| Load | `tools/loadtest` | SP-19 | Manual run, results in README |
+| Load | `tools/loadtest` | SP-19 | Manual run against the scale stack, results in `docs/loadtest.md` |
 
-CI (GitHub Actions) runs `pnpm lint && pnpm typecheck && pnpm test` with a Redis service container. E2E runs on demand.
+CI (GitHub Actions) runs `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm build`, with Postgres and Redis service containers. E2E runs on demand (locally, against the scale stack, and against production).
 
 ---
 
@@ -1272,7 +1274,7 @@ CI (GitHub Actions) runs `pnpm lint && pnpm typecheck && pnpm test` with a Redis
 | Redis | **Render Key Value** `watch-party-redis` (free, private network only, `maxmemoryPolicy: volatile-lru`) | Declared in `render.yaml`. Its `connectionString` becomes `REDIS_URL` → enables the streams adapter, Redis repo and Redis limiter. `volatile-lru`: rooms (archived in Postgres), limiter buckets and recovery sessions all have TTLs and may be evicted, while the adapter's stream has none and never is |
 
 - **One origin** means no CORS and first-party cookies, which avoids third-party-cookie and Safari ITP problems with a split frontend/backend.
-- **Free-tier sleep:** documented in README, plus an external uptime ping during the review window.
+- **Free-tier sleep:** documented in the README. An external uptime ping (e.g. every 10 minutes on `/api/health`) is recommended during the review window.
 - **Fallback platform:** Railway with the same Dockerfile-less Nixpacks build and the same env vars.
 - **Local:** `docker compose up -d` (Postgres on host port **5433**, Redis on **6380**, chosen to avoid clashing with locally installed services on the default ports), then `pnpm dev`. That runs Vite on :5173 proxying `/api` and `/socket.io` to :3000, so cookies stay same-origin in dev too.
 - **Scale demo:** `docker compose --profile scale up -d --build` runs two server replicas behind nginx on :8080. They run with `NODE_ENV=development`, because production-only behavior (HSTS, upgrade-insecure-requests, secure cookies, per-IP guest sign-in limits) assumes TLS and a public edge. For the same reason, the CSP allows the `http:` YouTube player API outside production (`youtube-player` loads it with the page's scheme).
@@ -1293,7 +1295,7 @@ sequenceDiagram
   H->>S: POST /api/rooms {name, videoUrl}
   S->>S: parse + oEmbed (prepare)
   S->>P: INSERT rooms (write-through)
-  S->>R: SET wp:room:K7M2QX
+  S->>R: create wp:room:K7M2QX (Lua, only if absent)
   S-->>H: 201 {roomId}
   H->>S: WS connect (cookie) → auth middleware → session
   H->>S: join_room {roomId}
@@ -1312,7 +1314,7 @@ sequenceDiagram
   participant V as Viewer (inst B)
   M->>A: seek {time: 120}
   A->>A: validate → rateLimit → authorize(playback.control)
-  A->>R: load room v41 → seek(120, now) → EVAL cas.lua (expect 41)
+  A->>R: load room v41 → seek(120, now) → EVALSHA compare-and-set (expect 41)
   R-->>A: 1 (ok, v42)
   A->>R: XADD (adapter) sync_state
   A-->>M: sync_state + ack ok
@@ -1442,7 +1444,7 @@ Deliberately excluded and stated here so nothing is half-built:
 | Roles + host assigns roles | SP-3, SP-4 (`assignRole`) |
 | Backend validates permissions | SP-1 (zod), SP-3, SP-7 (`authorize` + re-check in execute) |
 | Broadcast role updates, UI disables controls | SP-8 (`role_assigned`), SP-14 (`useCan`) |
-| Remove participant / transfer host | SP-4, SP-8 (`kicked`, cross-instance disconnect), SP-9 |
+| Remove participant / transfer host | SP-4, SP-8 (`kicked`, cross-instance `socketsLeave`), SP-9 |
 | Participant must request approval | SP-10 |
 | Suggested event names | SP-1 (kept verbatim) |
 | Deployment, public URL | SP-23 |
