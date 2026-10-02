@@ -389,20 +389,29 @@ P0 Scaffold ─► P1 Shared Contract ─► P2 Domain ─► P3 Application ─
 ## P14 · Docs & Release
 
 **Tasks**
-- [ ] `README.md`: live URL, feature list, screenshots/GIF, quick start (`docker compose up -d && pnpm i && cp .env.example .env && pnpm dev`), env table, deployment notes, scaling results, trade-offs, known limitations
-- [ ] `docs/ARCHITECTURE.md`: condensed from LLD (diagram, WebSocket flow, sync algorithm, RBAC, scaling)
-- [ ] `docs/WALKTHROUGH.md`: talking points per library and per design decision (the brief's "Code Understanding" section)
-- [ ] 2–3 min demo video (host / mod / participant split screen)
-- [ ] Final prod deploy, smoke test, tag `v1.0.0`
+- [x] `README.md`: live URL, feature list, screenshots/GIF, quick start (`docker compose up -d && pnpm i && cp .env.example .env && pnpm dev`), env table, deployment notes, scaling results, trade-offs, known limitations
+- [x] `docs/ARCHITECTURE.md`: condensed from LLD (diagram, WebSocket flow, sync algorithm, RBAC, scaling)
+- [x] `docs/WALKTHROUGH.md`: talking points per library and per design decision (the brief's "Code Understanding" section)
+- [ ] 2–3 min demo video (host / mod / participant split screen). Optional in the brief; to be recorded by the author (narration). Screenshots are in the README.
+- [x] Final prod deploy, smoke test, tag `v1.0.0`
+
+**Done.**
+- **Fresh clone:** a clone from GitHub following only the README ran locally; its own sync and roles E2E tests passed against it.
+- **Production:** all 17 E2E tests pass against production (no restarts during the run). `/metrics` is enabled and token-protected (401 without the token).
+- **Found and fixed:** a host was occasionally asked for their name again after creating a room. better-auth rate-limited `/get-session` per IP, and the client kept its stale session after a 429. Session reads are now exempt; covered by a Postgres test.
+- **New spec:** `e2e/smoke.spec.ts` covers the two checklist items the suite lacked (refresh keeps role and position; demotion relocks controls).
 
 **Exit Criteria:** a fresh clone following only the README runs locally. The live URL passes the smoke checklist below.
 
 ### Final smoke checklist (prod)
-- [ ] Create room → share link → join as guest on a second device
-- [ ] Play / pause / seek / change video sync (< 1s)
-- [ ] Participant blocked → requests → host approves → applied
-- [ ] Promote to moderator → controls unlock. Demote → they lock again.
-- [ ] Remove participant → kicked screen, can't rejoin
-- [ ] Transfer host. Host closes tab → succession after 15s.
-- [ ] Chat, reactions, queue auto-advance
-- [ ] Refresh mid-video → same role, same position
+
+All items are automated and passed against production (`E2E_BASE_URL=… pnpm e2e`). Separate browser contexts stand in for second devices; a manual check on a real phone over mobile data is still worthwhile.
+
+- [x] Create room → share link → join as guest on a second device (`room.spec`, `sync.spec`)
+- [x] Play / pause / seek / change video sync (< 1s) (`sync.spec`: drift < 1 s asserted)
+- [x] Participant blocked → requests → host approves → applied (`roles.spec`, `social.spec`)
+- [x] Promote to moderator → controls unlock. Demote → they lock again. (`roles.spec`, `smoke.spec`)
+- [x] Remove participant → kicked screen, can't rejoin (`roles.spec`)
+- [x] Transfer host. Host closes tab → succession after 15s. (`roles.spec`, `chaos.spec`)
+- [x] Chat, reactions, queue auto-advance (`social.spec`)
+- [x] Refresh mid-video → same role, same position (`smoke.spec`)
