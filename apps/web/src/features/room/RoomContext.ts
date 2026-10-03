@@ -23,7 +23,7 @@ const useRoomContext = (): RoomContextValue => {
   return value;
 };
 
-/** Subscribe to one slice of room state (rules.md §9.3: always through a selector). */
+/** Subscribe to one slice of room state (always through a selector). */
 export const useRoom = <T>(selector: (state: RoomState) => T): T =>
   useStore(useRoomContext().store, selector);
 

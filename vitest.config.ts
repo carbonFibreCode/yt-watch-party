@@ -10,7 +10,7 @@ export default defineConfig({
       provider: 'v8',
       include: ['packages/*/src/**', 'apps/*/src/**'],
       exclude: ['**/*.test.{ts,tsx}', '**/test/**'],
-      // Coverage floors (rules.md §10.2).
+      // Coverage floors.
       thresholds: {
         'packages/shared/src/{permissions,playback,youtube,errors}.ts': FULL,
         'apps/server/src/domain/**/*.ts': { lines: 95, functions: 95, branches: 90, statements: 95 },

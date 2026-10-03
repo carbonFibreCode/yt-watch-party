@@ -1,6 +1,6 @@
 import type { ErrorCode } from '@watchparty/shared';
 
-/** The only error type thrown on purpose (rules.md §7.1). The pipeline maps `code` to an ack error. */
+/** The only error type thrown on purpose. The pipeline maps `code` to an ack error. */
 export class DomainError extends Error {
   constructor(readonly code: ErrorCode) {
     super(code);

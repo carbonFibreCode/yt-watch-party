@@ -1,7 +1,7 @@
 import type { z } from 'zod';
 import { DomainError } from '../../domain/DomainError';
 
-/** Validates REST input against a shared contract schema (rules.md §7.2). */
+/** Validates REST input against a shared contract schema. */
 export const parseInput = <T>(schema: z.ZodType<T>, value: unknown): T => {
   const result = schema.safeParse(value);
   if (!result.success) {

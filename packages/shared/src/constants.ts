@@ -1,5 +1,5 @@
 /**
- * Every tunable number in the system lives here (LLD §Constants, rules.md §4.1).
+ * Every tunable number in the system lives here (LLD §Constants).
  * Units are always part of the name.
  */
 

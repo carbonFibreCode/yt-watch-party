@@ -66,7 +66,7 @@ export interface ComposedApp {
 }
 
 /**
- * Composition root (LLD SP-20, rules.md §2.7): the only place concrete classes are constructed
+ * Composition root (LLD SP-20): the only place concrete classes are constructed
  * and wired. Creating the app has no side effects; `start` does.
  */
 export const composeApp = (options: ComposeOptions): ComposedApp => {

@@ -48,7 +48,7 @@ export interface AckError {
   readonly message: string;
 }
 
-/** The one envelope every socket command acknowledges with (rules.md §7.3). */
+/** The one envelope every socket command acknowledges with. */
 export type AckResult<T> =
   { readonly ok: true; readonly data: T } | { readonly ok: false; readonly error: AckError };
 

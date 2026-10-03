@@ -3,7 +3,7 @@ import { VIDEO_ID_PATTERN } from './contract/primitives';
 import type { VideoId } from './contract/primitives';
 
 /**
- * YouTube URL handling (LLD SP-11). Parsing is delegated to `get-video-id` (rules.md §5);
+ * YouTube URL handling (LLD SP-11). Parsing is delegated to `get-video-id`;
  * this module only narrows its result to a valid YouTube id.
  */
 

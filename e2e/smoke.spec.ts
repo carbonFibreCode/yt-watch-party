@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Browser, Locator, Page } from '@playwright/test';
 
-/** Release smoke checks not covered elsewhere (building_plan.md P14 checklist). */
+/** Release smoke checks not covered by the other specs. */
 test.describe.configure({ timeout: 120_000 });
 
 const SYNC_TIMEOUT_MS = 20_000;

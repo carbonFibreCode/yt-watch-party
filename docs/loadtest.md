@@ -103,7 +103,7 @@ The cross-instance behavior is also tested deterministically in CI
   latencies include no real network. Container and host clocks are the same clock (Docker
   Desktop's VM is synced to the host), so `receivedAt − serverTime` is meaningful only because
   everything is local.
-- **The resource figures are one sample**, not a time series. Prometheus metrics are Phase 13.
+- **The resource figures are one sample**, not a time series. The server exposes Prometheus metrics (`/metrics`) for continuous measurement.
 - **No browsers.** The load generator speaks the real protocol but doesn't run browsers, so it
   measures the server and the network path, not YouTube playback. Playback across the two
   instances is covered by the full Playwright suite, which also passes against this stack

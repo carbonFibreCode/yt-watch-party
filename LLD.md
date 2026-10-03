@@ -1,6 +1,6 @@
 # YouTube Watch Party: Low-Level Design
 
-> Companion to [`plan.md`](./plan.md). That file says **what** we ship and **when**. This one fixes **how**, down to class names, interfaces, payloads, constants, and failure behavior. Nothing here is "TBD": if something isn't in this document, it's out of scope (see §25 Non-Goals).
+> How Watch Party is built, down to class names, interfaces, payloads, constants, and failure behavior. Nothing here is "TBD": if something isn't in this document, it's out of scope (see §25 Non-Goals). For a shorter tour, read [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
 >
 > Every sub-problem is written as **Why → What → How**.
 > - *Why*: the problem and the constraint that makes it hard.
@@ -111,7 +111,7 @@ All versions were checked against the npm registry on 2026-10-01. **Rule: use a 
 | Redis client | `redis` (node-redis) | 6.3.0 | The adapter's documented client. Reusing it for state, Lua CAS, and rate limiting means **one client library** (DRY). `ioredis` was rejected to avoid running two clients |
 | Validation + types | `zod` | 4.6.5 | One schema produces both the runtime validator and the static type. Shared by client and server |
 | Auth (guest + login) | `better-auth` (+ `anonymous` plugin, `drizzle` adapter) | 1.7.7 | Guest sessions (`signIn.anonymous`) and email/password in one library, with **anonymous → real account linking** (`onLinkAccount`). Cookie sessions work with same-origin WebSockets. `getSession({headers: fromNodeHeaders(...)})` works directly on the Socket.IO handshake |
-| ORM + migrations | `drizzle-orm` + `drizzle-kit` + `pg` | 0.45.3 / 8.23.1 | SQL-first, no engine binary, first-class better-auth adapter. Prisma's `latest` tag is currently an 8.0 **RC**, which we don't want to depend on in a 24h build |
+| ORM + migrations | `drizzle-orm` + `drizzle-kit` + `pg` | 0.45.3 / 8.23.1 | SQL-first, no engine binary, first-class better-auth adapter. Prisma's `latest` tag is currently an 8.0 **RC**, which we don't want to depend on |
 | YouTube player | `youtube-player` (gajus) + `@types/youtube-player` 5.5.11 | 5.6.0 | Promise-based wrapper over the IFrame API that queues calls until the player is ready. `react-youtube` is a thin React wrapper around this same lib. We need imperative control, so we use the core directly |
 | YouTube ID parsing | `get-video-id` | 4.2.0 | Handles watch, `youtu.be`, `/shorts/`, `/live/`, `/embed/`, and `?si=`/`t=` params. Maintained (2026) |
 | Clock sync | `timesync` | 1.0.11 | Implements the NTP-style multi-sample offset algorithm with a pluggable transport (`send`/`receive`). We plug in Socket.IO acks. Small and dependency-free. The algorithm is mature, so the age is acceptable |
@@ -125,10 +125,10 @@ All versions were checked against the npm registry on 2026-10-01. **Rule: use a 
 | Frontend | `react` 19 + `vite` + `react-router` 8 + `@tanstack/react-query` 5 + `zustand` 5 | — | Vite is brief-recommended. React Query for REST. Zustand for socket-fed room state (selectors avoid re-render storms) |
 | UI kit | `tailwindcss` 4 + `shadcn/ui` (Radix) + `lucide-react` + `sonner` | — | Accessible primitives (Dialog, DropdownMenu, Slider, Tabs, Tooltip). Sonner for toasts with action buttons (Approve/Reject) |
 | Reaction animation | `motion` | 13.5.0 | `AnimatePresence` floating emojis in about 20 lines |
-| Tests | `vitest` 5, `@playwright/test` 1.63, `@testing-library/react` 16 + `jest-dom`, `jsdom` **29.1.1** | — | Fast TS-native unit and integration tests. Two-context browser E2E (pulled forward to P6 to verify the two-browser exit criterion). jsdom 30 requires Node ≥ 24.15; 29.1.1 is the newest that supports the project's Node 24.12 |
+| Tests | `vitest` 5, `@playwright/test` 1.63, `@testing-library/react` 16 + `jest-dom`, `jsdom` **29.1.1** | — | Fast TS-native unit and integration tests. Multi-context browser E2E with real YouTube. jsdom 30 requires Node ≥ 24.15; 29.1.1 is the newest that supports the project's Node 24.12 |
 | Theme | own `ThemeProvider` + `public/theme-init.js` | — | `next-themes` (added by the shadcn CLI) was **rejected**: it injects an inline `<script>`, which React 19 warns about on every render and our CSP (`script-src 'self'`) blocks in production |
 | UI primitives | `radix-ui` (unified package) via `shadcn add` | 1.6.7 | Generated into `apps/web/src/components/ui`. `shadcn init` hung on an interactive prompt, so `components.json` and the theme tokens are written by hand (the same files the CLI writes) | **Every `shadcn add` re-adds a stray npm package named `cn` and imports from it**, so remove it and repoint the import to `@/lib/utils` each time
-| Language | `typescript` (pinned **6.0.3**) | 6.0.3 | TS 7 (native compiler) is `latest`, but `typescript-eslint` 8.71 requires `>=4.8.4 <6.1.0`. Type-aware lint is mandatory (rules §6), so we pin the newest supported 6.0.x |
+| Language | `typescript` (pinned **6.0.3**) | 6.0.3 | TS 7 (native compiler) is `latest`, but `typescript-eslint` 8.71 requires `>=4.8.4 <6.1.0`. Type-aware lint is mandatory, so we pin the newest supported 6.0.x |
 | Lint | `eslint` 10 + `typescript-eslint` (strict-type-checked) + `eslint-plugin-import-x` + `eslint-import-resolver-typescript` + `eslint-config-prettier` + `eslint-plugin-react-hooks` + `eslint-plugin-react-refresh` | 10.11 / 8.71 / 4.17 / 4.4 / 10.1 / 7.1 / 0.5 | `import-x/no-restricted-paths` enforces the layering rule (§1.4). `eslint-plugin-import` was rejected because it doesn't support ESLint 10 |
 | Format | `prettier` | 3.9.9 | |
 | Server bundling | `tsdown` | 0.23.0 | Bundles `apps/server` together with the source-only `@watchparty/shared` package into one ESM file. It's the maintained successor to `tsup` (whose README recommends migrating) and is Rolldown-based like Vite 8 |
@@ -980,12 +980,12 @@ interface SyncEngineOutput {                    // the engine never talks to soc
     - The IFrame API *replaces* the element it's given, so `usePlayerSync` creates that host element imperatively inside a React-owned container.
     - The `@types/youtube-player` typings omit `off`, so the adapter subscribes once per event and fans out to its own listener sets.
 12. **Observability.** The player surface exposes `data-sync-status`, `data-player-state` and `data-drift-ms`. These are used by the real-YouTube E2E test, which asserts drift under 1 s after seeks between two browsers.
-13. **Adaptive seek lead** (added in P10 after real-browser traces).
+13. **Adaptive seek lead** (added after real-browser traces).
     - **Problem:** a player resumes *behind* where it was sent, by its buffering time. With a fixed threshold, drift settled just under it (traces showed −978 ms and −360 ms, so viewers were about 0.6 s apart).
     - **Learning:** the first measurement after each playing seek/load updates `seekLeadS ← clamp(seekLeadS − drift × SEEK_LEAD_LEARNING_RATE, 0, MAX_SEEK_LEAD_S)`. Measurements beyond `MAX_LEARNABLE_DRIFT_S` (e.g. a slow first load) and measurements while buffering don't teach it.
     - **Applying it:** later playing seeks and loads target `expected + seekLeadS`; paused seeks are exact. `SEEK_THRESHOLD_S` drops to 0.3 s.
     - **Measured with real YouTube in two browsers:** both viewers settle within about 20–100 ms of the room timeline after a few corrections.
-14. **Resilience to a broken player** (found by the P10 chaos pass).
+14. **Resilience to a broken player** (found by the chaos E2E tests).
     - **The failure:** if the network drops while the IFrame API loads, `youtube-player`'s once-per-page loader never retries. Its queued calls then never settle, which would block the serialized engine forever.
     - **Adapter:** every call has a `PLAYER_CALL_TIMEOUT_MS` deadline (→ `PlayerUnavailableError`), and the adapter exposes `whenReady`.
     - **Engine:** the queue catches a failed pass and forgets the loaded video, so the next tick reloads it.
@@ -1062,7 +1062,7 @@ interface SyncEngineOutput {                    // the engine never talks to soc
 - `queue_add` / `queue_remove` require `playback.control`. Participants can `request_action {type:'queue_add'}`.
 - `videoEnded` → `queue.shift()` → `playback.load(next)` emits `QueueChanged` + `PlaybackChanged`.
 - "Play now" from the queue panel = `change_video` with the item's URL, followed by `queue_remove`. Two existing commands, no new event.
-- **Attribution:** `RequestedActions.apply(room, action, origin, now)` credits `origin`. That is the actor for a direct command and the **requester** for an approved request, so an approved `queue_add` reads "Added by Pat", not by the approving host. The P11 E2E test caught this; a handler test now pins it.
+- **Attribution:** `RequestedActions.apply(room, action, origin, now)` credits `origin`. That is the actor for a direct command and the **requester** for an approved request, so an approved `queue_add` reads "Added by Pat", not by the approving host. The social E2E test caught this; a handler test now pins it.
 
 ---
 
@@ -1108,7 +1108,7 @@ The table lives in `shared/constants.ts` as `RATE_LIMITS` (one source for the nu
 | `POST /api/rooms` | session | `{ name?: string(1..64), videoUrl?: string }` | `201 { roomId }` | Default name `"<user>'s room"`. Code via `nanoid customAlphabet(ROOM_CODE_ALPHABET, 6)`, retried on unique conflict (max 5). An optional initial video goes through the same `VideoResolver` and is **cued paused**. Write-through create. The creator's "recent rooms" entry is recorded immediately |
 | `GET /api/rooms/:code` | **public** | — | `200 { roomId, name, hostName: string \| null, participantCount (online), video: VideoRef \| null }` / `404` / `400` | Join-page preview, shown *before* the visitor picks a name. Codes are case-insensitive |
 | `GET /api/me/rooms` | session | — | `200 RoomSummary[]` (≤ 10) | "Recent rooms" from `room_memberships` |
-| `GET /api/health` | — | — | `200 { status: 'ok', checks: { [dependency]: boolean }, uptimeS }`, or `503` with `status: 'degraded'` if any check fails | Render health check. Checks are pluggable `HealthCheck`s registered by the composition root (`db` in P5, `redis` in P12) |
+| `GET /api/health` | — | — | `200 { status: 'ok', checks: { [dependency]: boolean }, uptimeS }`, or `503` with `status: 'degraded'` if any check fails | Render health check. Checks are pluggable `HealthCheck`s registered by the composition root (`db`, plus `redis` when `REDIS_URL` is set) |
 | `GET /metrics` | `Authorization: Bearer <METRICS_TOKEN>` (constant-time compare) | — | Prometheus text | 404 when `METRICS_TOKEN` is unset, 401 for a wrong token. Production gets a token generated by Render |
 | `GET /*` | — | — | SPA `index.html` | `express.static(web/dist)` + history fallback |
 

@@ -10,7 +10,7 @@ const snapshot = (id = 'K7M2QX'): RoomSnapshot =>
   Room.create({ id, name: 'Contract room', host: { userId: 'u-host', name: 'Hana' }, now: T0 }).toSnapshot();
 
 /**
- * Behavior every RoomRepository must have (rules.md §10.4, LSP). Each implementation's test
+ * Behavior every RoomRepository must have. Each implementation's test
  * file calls this with a factory for a fresh, empty store.
  */
 export const describeRoomRepository = (

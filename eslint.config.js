@@ -11,7 +11,7 @@ import tseslint from 'typescript-eslint';
 
 const SERVER = './apps/server/src';
 
-/** Layering rule (LLD §1.4, rules.md §2.1): a layer must never import from a layer to its right. */
+/** Layering rule (LLD §1.4): a layer must never import from a layer to its right. */
 const LAYER_ZONES = [
   {
     target: `${SERVER}/domain`,
@@ -87,13 +87,13 @@ export default defineConfig(
         'error',
         {
           selector: 'JSXAttribute[name.name="dangerouslySetInnerHTML"]',
-          message: 'Never render user content as HTML (rules.md §11.5).',
+          message: 'Never render user content as HTML.',
         },
       ],
     },
   },
 
-  // ---------- server domain: pure, no I/O, no clock, no randomness (rules.md §2.2) ----------
+  // ---------- server domain: pure, no I/O, no clock, no randomness ----------
   {
     files: ['apps/server/src/domain/**/*.ts'],
     rules: {

@@ -7,7 +7,7 @@ import type { VideoResolver } from './VideoResolver';
 /**
  * The single implementation of every requestable playback action (LLD SP-10). A moderator's
  * direct command and an approved participant request both go through `prepare` + `apply`,
- * so there is exactly one code path per behavior (rules.md §4.4).
+ * so there is exactly one code path per behavior.
  */
 export class RequestedActions {
   constructor(

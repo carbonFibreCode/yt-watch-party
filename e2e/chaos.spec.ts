@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Browser, Locator, Page } from '@playwright/test';
 
-/** Chaos pass (building_plan P10): network loss, abandoned host, command spam. */
+/** Chaos tests: network loss, abandoned host, command spam. */
 test.describe.configure({ timeout: 180_000 });
 
 const VIDEO = 'https://youtu.be/dQw4w9WgXcQ';

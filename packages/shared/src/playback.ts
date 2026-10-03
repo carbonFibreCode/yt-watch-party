@@ -2,7 +2,7 @@ import type { PlaybackView } from './contract/views';
 
 /**
  * A playback timeline anchored to server time (LLD SP-5). The same projection is used by the
- * server's PlaybackState, the client SyncEngine and the client time display (rules.md §4.1).
+ * server's PlaybackState, the client SyncEngine and the client time display.
  */
 export interface PlaybackTimeline {
   readonly isPlaying: boolean;
