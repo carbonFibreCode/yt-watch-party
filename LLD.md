@@ -929,7 +929,8 @@ interface VideoPlayer {                          // YouTubePlayerAdapter wraps `
   destroy(): void;
 }
 
-type SyncStatus = 'idle' | 'loading' | 'in_sync' | 'buffering' | 'muted' | 'blocked' | 'embed_error';
+type SyncStatus = 'idle' | 'loading' | 'in_sync' | 'buffering' | 'muted' | 'blocked'
+  | 'embed_error' | 'video_unavailable' | 'player_rejected';   // 101/150 · 100 · 153: each has its own message
 
 class SyncEngine {
   constructor(player: VideoPlayer, clock: ServerClock, output: SyncEngineOutput, config = DEFAULT_SYNC_CONFIG);
@@ -967,7 +968,7 @@ interface SyncEngineOutput {                    // the engine never talks to soc
 7. **End and duration.**
    - The first `playing` of each video reports its duration once.
    - `ended` is reported once per revision, and only near the end (within `END_TOLERANCE_S`).
-   - YouTube errors 100/101/150 → `embed_error`. The engine stops retrying that video until the room picks another.
+   - YouTube errors map to a cause: 100 → `video_unavailable`, 101/150 → `embed_error`, 153 (no Referer) → `player_rejected`. The UI explains each one, and the engine stops retrying that video until the room picks another.
 8. **Visibility.** `visibilitychange → visible` runs `tick()` immediately.
 9. **UI time display.** `usePlaybackPosition()` projects the canonical server timeline with the synced clock every `UI_TIME_REFRESH_MS`, using the same math as the server and the engine. The player is never polled for display: the engine already keeps it within 1 s of that position.
 10. **Controls.**
@@ -1090,6 +1091,7 @@ The table lives in `shared/constants.ts` as `RATE_LIMITS` (one source for the nu
 - Session required for every socket.
 - All IDs come from the server session, never the payload.
 - `helmet` CSP: `frame-src https://www.youtube.com https://www.youtube-nocookie.com; script-src 'self' https://www.youtube.com https://s.ytimg.com (+ http://www.youtube.com outside production); img-src 'self' https://i.ytimg.com data:; connect-src 'self' wss: ws:; frame-ancestors 'none'`.
+- `Referrer-Policy: strict-origin-when-cross-origin` (YouTube's recommended policy). Helmet's default `no-referrer` made YouTube refuse every embed on iOS and mobile Chrome (error 150/153, "video unavailable") while desktop browsers played. Other sites only ever see our origin. Guarded by an HTTP test and an iPhone (WebKit) E2E test.
 - better-auth handles password hashing, CSRF on auth routes, and secure cookies (`sameSite=lax`, `secure` in prod).
 - Room capacity is capped at `ROOM_CAPACITY`.
 - No user HTML is ever rendered.

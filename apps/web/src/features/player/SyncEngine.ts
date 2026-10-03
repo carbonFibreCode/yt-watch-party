@@ -13,7 +13,11 @@ import type { PlaybackView, VideoId } from '@watchparty/shared';
 import type { PlayerState, ServerClock, VideoPlayer } from './ports';
 
 /** What the user should be told about playback. */
-export type SyncStatus = 'idle' | 'loading' | 'in_sync' | 'buffering' | 'muted' | 'blocked' | 'embed_error';
+/** Why YouTube won't play the current video here; the engine stops retrying until it changes. */
+export type PlaybackErrorStatus = 'embed_error' | 'video_unavailable' | 'player_rejected';
+
+export type SyncStatus =
+  'idle' | 'loading' | 'in_sync' | 'buffering' | 'muted' | 'blocked' | PlaybackErrorStatus;
 
 export interface SyncEngineOutput {
   /** The player knows the video's length; tell the server (first report wins) and the UI. */
@@ -39,8 +43,23 @@ export const DEFAULT_SYNC_CONFIG: SyncConfig = {
   autoplayDetectMs: AUTOPLAY_DETECT_MS,
 };
 
-/** YouTube's "can't play here" error codes: not found/private (100) and embedding disabled (101/150). */
-const EMBED_ERRORS: ReadonlySet<number> = new Set([100, 101, 150]);
+/**
+ * YouTube player error codes that mean "this video won't play here", by cause: private or removed
+ * (100), embedding refused (101/150: usually the owner disabled it, but iOS also reports a missing
+ * Referer this way), and the request lacking the embedding site's identity, i.e. no HTTP Referer
+ * (153). Other codes (e.g. transient HTML5 errors) are not final.
+ */
+const PLAYBACK_ERRORS: ReadonlyMap<number, PlaybackErrorStatus> = new Map([
+  [100, 'video_unavailable'],
+  [101, 'embed_error'],
+  [150, 'embed_error'],
+  [153, 'player_rejected'],
+]);
+
+const PLAYBACK_ERROR_STATUSES: ReadonlySet<SyncStatus> = new Set(PLAYBACK_ERRORS.values());
+
+export const isPlaybackError = (status: SyncStatus): status is PlaybackErrorStatus =>
+  PLAYBACK_ERROR_STATUSES.has(status);
 
 /**
  * Keeps a VideoPlayer aligned with the room's server-authoritative timeline (LLD SP-13).
@@ -146,7 +165,7 @@ export class SyncEngine {
       this.output.driftMeasured(null);
       return;
     }
-    if (this.currentStatus === 'embed_error' && this.loadedVideoId === target.videoId) {
+    if (isPlaybackError(this.currentStatus) && this.loadedVideoId === target.videoId) {
       return;
     }
     const now = this.clock.now();
@@ -260,8 +279,9 @@ export class SyncEngine {
   }
 
   private onPlayerError(code: number): void {
-    if (EMBED_ERRORS.has(code)) {
-      this.setStatus('embed_error');
+    const status = PLAYBACK_ERRORS.get(code);
+    if (status !== undefined) {
+      this.setStatus(status);
     }
   }
 

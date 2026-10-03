@@ -3,7 +3,16 @@ import type { ReactElement, RefObject } from 'react';
 import { Button } from '@/components/ui/button';
 import { ReactionOverlay } from '@/features/reactions/ReactionOverlay';
 import { useRoom } from '@/features/room/RoomContext';
+import { isPlaybackError } from './SyncEngine';
+import type { PlaybackErrorStatus } from './SyncEngine';
 import type { PlayerSync } from './usePlayerSync';
+
+const PLAYBACK_ERROR_REASON: Readonly<Record<PlaybackErrorStatus, string>> = {
+  // Usually the owner disabled embedding, but YouTube reports some other refusals with these codes.
+  embed_error: "YouTube won't play it in embedded players (usually the owner disabled embedding).",
+  video_unavailable: "It's private or has been removed.",
+  player_rejected: 'YouTube refused to load it in this player on your device.',
+};
 
 interface PlayerSurfaceProps {
   readonly containerRef: RefObject<HTMLDivElement | null>;
@@ -106,7 +115,7 @@ export function PlayerSurface({ containerRef, sync, canControl }: PlayerSurfaceP
         </div>
       )}
 
-      {status === 'embed_error' && (
+      {isPlaybackError(status) && (
         <div
           role="alert"
           className="absolute inset-0 grid place-items-center bg-black/80 px-6 text-center text-white"
@@ -115,8 +124,12 @@ export function PlayerSurface({ containerRef, sync, canControl }: PlayerSurfaceP
             <MonitorX className="size-10" />
             <p className="font-medium">This video can't be played here</p>
             <p className="text-sm text-white/70">
-              Its owner doesn't allow embedding.{' '}
-              {canControl ? 'Pick another video.' : 'The host can pick another video.'}
+              {PLAYBACK_ERROR_REASON[status]}{' '}
+              {status === 'player_rejected'
+                ? 'Try reloading the page.'
+                : canControl
+                  ? 'Pick another video.'
+                  : 'The host can pick another video.'}
             </p>
           </div>
         </div>

@@ -269,6 +269,22 @@ describe('SyncEngine', () => {
     expect(engine.status).toBe('loading');
   });
 
+  it('tells apart why a video cannot play: private/removed, embedding off, player rejected', async () => {
+    for (const [code, status] of [
+      [100, 'video_unavailable'],
+      [101, 'embed_error'],
+      [153, 'player_rejected'],
+    ] as const) {
+      const { engine, player, state, settle } = setup();
+      await engine.apply(state());
+      player.emitError(code);
+      expect(engine.status).toBe(status);
+      const calls = player.calls.length;
+      await settle();
+      expect(player.calls).toHaveLength(calls);
+    }
+  });
+
   it('coalesces overlapping updates to the latest room state', async () => {
     const { engine, player, state } = setup();
     await Promise.all([
