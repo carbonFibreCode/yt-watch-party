@@ -2,7 +2,7 @@ import type { Role } from './contract/primitives';
 
 /**
  * Role-based access control (LLD SP-3). Shared by the server's `authorize` middleware and the
- * client's `useCan()` so the UI disables exactly what the server would reject (rules.md §4.1).
+ * client's `useCan()` so the UI disables exactly what the server would reject.
  */
 
 export const CAPABILITIES = [

@@ -3,7 +3,7 @@ import { Role, RoomCode, UserId, VideoId } from '@watchparty/shared';
 import type { RoomSnapshot } from '../../domain/snapshot';
 
 /**
- * Serialization for persisted rooms (rules.md §7.2: the store is a trust boundary). Typed as
+ * Serialization for persisted rooms (the store is a trust boundary). Typed as
  * `z.ZodType<RoomSnapshot>`, so the schema cannot drift from the domain type. Shared by every
  * RoomRepository implementation (DRY).
  */

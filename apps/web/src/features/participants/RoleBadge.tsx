@@ -10,7 +10,7 @@ const ICONS: Partial<Record<Role, ReactElement>> = {
   viewer: <Eye />,
 };
 
-/** Role with an icon, so role is never conveyed by color alone (rules.md §9.6). */
+/** Role with an icon, so role is never conveyed by color alone. */
 export function RoleBadge({ role }: { readonly role: Role }): ReactElement {
   return (
     <Badge variant={role === 'host' ? 'default' : 'secondary'} className="gap-1">

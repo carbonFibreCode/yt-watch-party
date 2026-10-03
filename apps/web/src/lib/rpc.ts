@@ -56,7 +56,7 @@ export interface RpcOptions {
   readonly onError: (error: AckError) => void;
 }
 
-/** The only way the client sends commands (rules.md §2.5): acked, timed out, errors surfaced once. */
+/** The only way the client sends commands: acked, timed out, errors surfaced once. */
 export const createRpc = (socket: RoomSocket, options: RpcOptions): Rpc => {
   const emit = createEmitters(socket);
   return async (event, payload) => {

@@ -11,7 +11,7 @@ export interface CommandContext {
   readonly actor: Participant | null;
 }
 
-/** Declarative policy the pipeline enforces for every handler (rules.md §8.3). */
+/** Declarative policy the pipeline enforces for every handler. */
 export interface CommandPolicy {
   /** null = any member (or anyone, when membership is not required). */
   readonly capability: Capability | null;

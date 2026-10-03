@@ -177,7 +177,7 @@ export const createRoomStore = (): RoomStore =>
     },
   }));
 
-// ---------- selectors (subscribe with these, never to the whole store: rules.md §9.3) ----------
+// ---------- selectors (subscribe with these, never to the whole store) ----------
 
 export const selectSelf = (s: RoomData): ParticipantView | undefined =>
   s.participants.find((p) => p.userId === s.selfId);

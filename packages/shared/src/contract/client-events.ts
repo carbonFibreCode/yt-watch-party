@@ -37,7 +37,7 @@ export type RequestableActionType = RequestableAction['type'];
 
 /** The single list of client → server intents (LLD SP-1). Brief-mandated names are kept verbatim. */
 export const ClientEventSchemas = {
-  /** The display name comes from the session, never from the payload (rules.md §11.1). */
+  /** The display name comes from the session, never from the payload. */
   join_room: z.strictObject({ roomId: RoomCode }),
   leave_room: z.strictObject({ roomId: RoomCode }),
   play,

@@ -167,8 +167,5 @@ and a fan-out p99 of 6 ms. Method, numbers and limits are in [`docs/loadtest.md`
 
 ## Project documents
 
-- [`plan.md`](plan.md): scope and timeline
 - [`LLD.md`](LLD.md): low-level design (every sub-problem: why, what, how)
-- [`building_plan.md`](building_plan.md): build phases, exit criteria and what each one found
-- [`rules.md`](rules.md): engineering rules the code follows
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · [`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md) · [`docs/loadtest.md`](docs/loadtest.md)

@@ -16,8 +16,8 @@ export interface MutationResult<T> {
 }
 
 /**
- * Unit of Work for the Room aggregate (LLD SP-6). `mutate` is the only way room state changes
- * (rules.md §2.4): load → housekeeping → mutate → compare-and-set → hand back the events.
+ * Unit of Work for the Room aggregate (LLD SP-6). `mutate` is the only way room state changes:
+ * load → housekeeping → mutate → compare-and-set → hand back the events.
  */
 export class RoomService {
   constructor(
