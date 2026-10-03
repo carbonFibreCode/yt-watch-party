@@ -10,6 +10,10 @@ import helmet from 'helmet';
 export const securityHeaders = (production: boolean): RequestHandler =>
   helmet({
     strictTransportSecurity: production,
+    // YouTube identifies the embedding site by the Referer; helmet's default `no-referrer` makes
+    // the player fail with error 153 on several browsers (mobile Chrome, iOS Safari). This is the
+    // policy YouTube recommends: other sites only ever see our origin, never a path.
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],

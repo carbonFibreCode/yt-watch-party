@@ -65,6 +65,8 @@ describe('http app', () => {
     const csp = response.headers.get('content-security-policy') ?? '';
     expect(csp).toContain('frame-src https://www.youtube.com https://www.youtube-nocookie.com');
     expect(csp).toContain("frame-ancestors 'none'");
+    // YouTube rejects embeds without a Referer (error 153).
+    expect(response.headers.get('referrer-policy')).toBe('strict-origin-when-cross-origin');
     expect(response.headers.get('x-powered-by')).toBeNull();
   });
 

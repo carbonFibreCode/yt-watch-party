@@ -109,9 +109,9 @@ An empty `NAME=` line counts as unset.
 ```bash
 pnpm format:check && pnpm lint && pnpm typecheck
 pnpm test                       # ~600 unit, integration, Postgres and Redis tests (needs docker compose up)
-pnpm exec playwright install chromium   # once, for browser tests
-pnpm e2e                        # 16 browser tests against the local stack: real YouTube sync, roles,
-                                # chat/reactions/queue, network chaos, accessibility
+pnpm exec playwright install chromium webkit   # once, for browser tests
+pnpm e2e                        # 18 browser tests against the local stack: real YouTube sync, roles,
+                                # chat/reactions/queue, network chaos, accessibility, iPhone (WebKit)
 E2E_BASE_URL=https://watch-party-w4wi.onrender.com pnpm e2e   # the same suite against production
 ```
 
