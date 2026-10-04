@@ -34,6 +34,34 @@ describe('Room playback', () => {
     expect(room.playback.rev).toBe(4);
   });
 
+  it('a speed change is a real change: broadcast and a new revision; the same speed is not', () => {
+    const room = playingRoom();
+    room.setRate(1.5, T0 + 1_000);
+    expect(room.pullEvents()).toEqual([{ type: 'PlaybackChanged' }]);
+    expect(room.playback.rate).toBe(1.5);
+    expect(room.playback.rev).toBe(2);
+    room.setRate(1.5, T0 + 2_000);
+    expect(room.pullEvents()).toEqual([]);
+  });
+
+  it('accepts "ended" as soon as a sped-up video really reaches its end', () => {
+    const room = playingRoom();
+    room.setRate(2, T0);
+    room.pullEvents();
+    const atEnd = T0 + (DURATION_S / 2) * 1000;
+    room.videoEnded(FIRST.id, room.playback.rev, atEnd - 10_000);
+    expect(room.playback.playState).toBe('playing');
+    room.videoEnded(FIRST.id, room.playback.rev, atEnd);
+    expect(room.playback.playState).toBe('paused');
+  });
+
+  it('a slowed-down video is not ended early at its normal-speed end time', () => {
+    const room = playingRoom();
+    room.setRate(0.5, T0);
+    room.videoEnded(FIRST.id, room.playback.rev, endTime);
+    expect(room.playback.playState).toBe('playing');
+  });
+
   it('stays silent for no-op transitions', () => {
     const room = playingRoom();
     room.play(T0 + 1_000);

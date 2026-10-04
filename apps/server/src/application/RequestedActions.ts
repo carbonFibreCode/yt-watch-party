@@ -23,6 +23,8 @@ export class RequestedActions {
         return { type: action.type };
       case 'seek':
         return { type: 'seek', time: action.time };
+      case 'set_rate':
+        return { type: 'set_rate', rate: action.rate };
       case 'change_video': {
         const { video, startAt } = await this.videos.resolve(action.url);
         return { type: 'change_video', video, startAt };
@@ -48,6 +50,9 @@ export class RequestedActions {
         return;
       case 'seek':
         room.seek(action.time, now);
+        return;
+      case 'set_rate':
+        room.setRate(action.rate, now);
         return;
       case 'change_video':
         room.changeVideo(action.video, action.startAt, now);

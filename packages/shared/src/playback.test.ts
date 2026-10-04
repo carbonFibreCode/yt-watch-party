@@ -8,6 +8,7 @@ const timeline = (overrides: Partial<PlaybackTimeline> = {}): PlaybackTimeline =
   anchorPosition: 10,
   anchorTime: 1_000_000,
   duration: null,
+  rate: 1,
   ...overrides,
 });
 
@@ -28,6 +29,23 @@ describe('projectPosition', () => {
     expect(projectPosition(timeline(), 999_000)).toBe(10);
   });
 
+  it.each([
+    [2, 15],
+    [1.5, 13.75],
+    [0.5, 11.25],
+    [0.25, 10.625],
+  ])('advances by elapsed time × the rate (%s×)', (rate, expected) => {
+    expect(projectPosition(timeline({ rate }), 1_002_500)).toBe(expected);
+  });
+
+  it('ignores the rate while paused', () => {
+    expect(projectPosition(timeline({ isPlaying: false, rate: 2 }), 1_060_000)).toBe(10);
+  });
+
+  it('still clamps to the duration at a fast rate', () => {
+    expect(projectPosition(timeline({ duration: 14, rate: 2 }), 1_005_000)).toBe(14);
+  });
+
   it('clamps to the duration once known', () => {
     expect(projectPosition(timeline({ duration: 11 }), 1_005_000)).toBe(11);
   });
@@ -41,6 +59,7 @@ describe('timelineFromView', () => {
     currentTime: 42,
     serverTime: 5_000,
     duration: 200,
+    playbackRate: 1,
     rev: 7,
   };
 
@@ -50,6 +69,7 @@ describe('timelineFromView', () => {
       anchorPosition: 42,
       anchorTime: 5_000,
       duration: 200,
+      rate: 1,
     });
   });
 
@@ -59,5 +79,9 @@ describe('timelineFromView', () => {
 
   it('round-trips through projection on the client', () => {
     expect(projectPosition(timelineFromView(view), 6_000)).toBe(43);
+  });
+
+  it('carries the room speed into the projection', () => {
+    expect(projectPosition(timelineFromView({ ...view, playbackRate: 1.5 }), 7_000)).toBe(45);
   });
 });

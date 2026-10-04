@@ -19,6 +19,7 @@ describe('RequestedActions', () => {
     expect(await a.prepare({ type: 'play' })).toEqual({ type: 'play' });
     expect(await a.prepare({ type: 'pause' })).toEqual({ type: 'pause' });
     expect(await a.prepare({ type: 'seek', time: 9 })).toEqual({ type: 'seek', time: 9 });
+    expect(await a.prepare({ type: 'set_rate', rate: 1.25 })).toEqual({ type: 'set_rate', rate: 1.25 });
   });
 
   it('resolves URLs for video actions', async () => {
@@ -45,6 +46,10 @@ describe('RequestedActions', () => {
     a.apply(r, await a.prepare({ type: 'queue_add', url: 'aaaaaaaaaaa' }), host, T0 + 4_000);
     expect(r.playback.playState).toBe('playing');
     expect(r.playback.positionAt(T0 + 3_000)).toBe(30);
+    a.apply(r, await a.prepare({ type: 'set_rate', rate: 2 }), host, T0 + 5_000);
+    expect(r.playback.rate).toBe(2);
+    expect(r.playback.positionAt(T0 + 5_000)).toBe(32);
+    expect(r.playback.positionAt(T0 + 6_000)).toBe(34);
     expect(r.queueItems()).toMatchObject([{ id: 'id-1', addedBy: { userId: 'h', name: 'Hana' } }]);
   });
 });

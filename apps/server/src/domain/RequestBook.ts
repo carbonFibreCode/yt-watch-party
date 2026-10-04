@@ -11,6 +11,7 @@ export type RequestedAction =
   | { readonly type: 'play' }
   | { readonly type: 'pause' }
   | { readonly type: 'seek'; readonly time: number }
+  | { readonly type: 'set_rate'; readonly rate: number }
   | { readonly type: 'change_video'; readonly video: VideoRef; readonly startAt: number }
   | { readonly type: 'queue_add'; readonly video: VideoRef };
 

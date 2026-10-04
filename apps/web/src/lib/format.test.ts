@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDuration, initials, roleLabel, timeAgo } from './format';
+import { formatDuration, formatRate, initials, roleLabel, timeAgo } from './format';
 
 describe('format', () => {
   it.each([
@@ -33,5 +33,16 @@ describe('format', () => {
     [-4, '0:00'],
   ])('formatDuration(%d) = %s', (seconds, expected) => {
     expect(formatDuration(seconds)).toBe(expected);
+  });
+});
+
+describe('formatRate', () => {
+  it.each([
+    [1, 'Normal'],
+    [1.5, '1.5×'],
+    [0.25, '0.25×'],
+    [2, '2×'],
+  ])('%s → %s', (rate, text) => {
+    expect(formatRate(rate)).toBe(text);
   });
 });

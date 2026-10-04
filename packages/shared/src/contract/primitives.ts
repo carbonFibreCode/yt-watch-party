@@ -4,6 +4,7 @@ import {
   DISPLAY_NAME_MAX_LEN,
   ID_MAX_LEN,
   MAX_MEDIA_SECONDS,
+  PLAYBACK_RATES,
   REACTION_SET,
   ROOM_CODE_ALPHABET,
   ROOM_CODE_LENGTH,
@@ -38,6 +39,8 @@ export const VideoUrl = z.string().trim().min(1).max(VIDEO_URL_MAX_LEN);
 // zod 4 numbers reject Infinity and NaN by default.
 export const Seconds = z.number().min(0).max(MAX_MEDIA_SECONDS);
 export const Revision = z.number().int().nonnegative();
+/** Only YouTube's standard speeds: anything else would be rounded differently by each player. */
+export const PlaybackRateSchema = z.literal(PLAYBACK_RATES);
 
 export const Role = z.enum(['host', 'moderator', 'participant', 'viewer']);
 export type Role = z.infer<typeof Role>;

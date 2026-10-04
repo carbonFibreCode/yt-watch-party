@@ -1,10 +1,11 @@
-import { Film, Loader2, MonitorX, Play, RefreshCw, VolumeX, WifiOff } from 'lucide-react';
+import { Film, Gauge, Loader2, MonitorX, Play, RefreshCw, VolumeX, WifiOff } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useRef, useState } from 'react';
 import type { MouseEvent, ReactElement, ReactNode, RefObject } from 'react';
 import { Button } from '@/components/ui/button';
 import { ReactionOverlay } from '@/features/reactions/ReactionOverlay';
 import { useRoom } from '@/features/room/RoomContext';
+import { formatRate } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { SEEK_FEEDBACK_MS, SEEK_STEP_LONG_S } from '@watchparty/shared';
 import { isPlaybackError } from './SyncEngine';
@@ -50,6 +51,7 @@ export function PlayerSurface({
   onToggleImmersive,
 }: PlayerSurfaceProps): ReactElement {
   const hasVideo = useRoom((s) => s.playback !== null && s.playback.videoId !== null);
+  const roomRate = useRoom((s) => s.playback?.playbackRate ?? 1);
   const { status } = sync;
   const [feedback, setFeedback] = useState<{ readonly side: Side; readonly id: number } | null>(null);
   const feedbackId = useRef(0);
@@ -136,6 +138,16 @@ export function PlayerSurface({
         >
           <Loader2 className="size-3.5 animate-spin" />
           {status === 'loading' ? 'Syncing…' : 'Buffering…'}
+        </div>
+      )}
+
+      {hasVideo && sync.rateUnsupported && (
+        <div
+          role="status"
+          className="absolute top-3 right-3 flex items-center gap-2 rounded-full bg-black/70 px-3 py-1 text-xs text-white"
+        >
+          <Gauge className="size-3.5" />
+          This video can't play at {formatRate(roomRate)} on your device
         </div>
       )}
 

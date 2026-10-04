@@ -25,6 +25,7 @@ const setup = (overrides: Partial<Options> = {}) => {
     hasVideo: true,
     playing: true,
     duration: 200,
+    playbackRate: 1,
     position: () => 100,
     rev: 1,
     send: vi.fn((a: RequestableAction) => {
@@ -203,6 +204,77 @@ describe('useKeyboardShortcuts: rapid seeks add up', () => {
     const { sent, user } = setup();
     await user.keyboard('{Home}l');
     expect(sent.map((a) => (a.type === 'seek' ? a.time : null))).toEqual([0, 10]);
+  });
+});
+
+describe('useKeyboardShortcuts: speed (< >)', () => {
+  it.each([
+    [1, '>', 1.25],
+    [1, '<', 0.75],
+    [1.75, '>', 2],
+    [0.5, '<', 0.25],
+  ])('at %s×, %s asks for %s×', async (playbackRate, key, expected) => {
+    const { sent, user } = setup({ playbackRate });
+    await user.keyboard(key);
+    expect(sent).toEqual([{ type: 'set_rate', rate: expected }]);
+  });
+
+  it.each([
+    [2, '>'],
+    [0.25, '<'],
+  ])('at %s× there is nothing further in that direction (%s does nothing)', async (playbackRate, key) => {
+    const { sent, user } = setup({ playbackRate });
+    await user.keyboard(key);
+    expect(sent).toEqual([]);
+  });
+
+  it('rapid > > steps twice before the room confirms the first', async () => {
+    const { sent, user } = setup({ playbackRate: 1 });
+    await user.keyboard('>>');
+    expect(sent).toEqual([
+      { type: 'set_rate', rate: 1.25 },
+      { type: 'set_rate', rate: 1.5 },
+    ]);
+  });
+
+  it('once the room shows the speed, the next step starts from it', async () => {
+    const { sent, user, hook, o } = setup({ playbackRate: 1 });
+    await user.keyboard('>');
+    hook.rerender({ ...o, playbackRate: 1.25 });
+    await user.keyboard('<');
+    expect(sent.at(-1)).toEqual({ type: 'set_rate', rate: 1 });
+  });
+
+  it('a refused step expires and the next one starts from the room again', async () => {
+    let now = 1_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const { sent, user } = setup({ playbackRate: 1 });
+    await user.keyboard('>');
+    now += SEEK_COALESCE_MS;
+    await user.keyboard('>');
+    expect(sent).toEqual([
+      { type: 'set_rate', rate: 1.25 },
+      { type: 'set_rate', rate: 1.25 },
+    ]);
+    vi.restoreAllMocks();
+  });
+
+  it('plain . and , (no Shift) do nothing', async () => {
+    const { sent, user } = setup();
+    await user.keyboard('.,');
+    expect(sent).toEqual([]);
+  });
+
+  it('participants and viewers cannot change the speed by keyboard', async () => {
+    const { sent, user } = setup({ canControl: false });
+    await user.keyboard('><');
+    expect(sent).toEqual([]);
+  });
+
+  it('needs a video', async () => {
+    const { sent, user } = setup({ hasVideo: false });
+    await user.keyboard('>');
+    expect(sent).toEqual([]);
   });
 });
 

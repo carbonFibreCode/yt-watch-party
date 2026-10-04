@@ -16,6 +16,7 @@ export const playback = (overrides: Partial<PlaybackView> = {}): PlaybackView =>
   currentTime: 0,
   serverTime: 1_000,
   duration: null,
+  playbackRate: 1,
   rev: 1,
   ...overrides,
 });

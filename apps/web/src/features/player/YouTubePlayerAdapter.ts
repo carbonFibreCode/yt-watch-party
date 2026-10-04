@@ -118,6 +118,14 @@ export class YouTubePlayerAdapter implements VideoPlayer {
     return this.call(() => this.player.setVolume(volume));
   }
 
+  getPlaybackRate(): Promise<number> {
+    return this.call(() => this.player.getPlaybackRate());
+  }
+
+  setPlaybackRate(rate: number): Promise<void> {
+    return this.call(() => this.player.setPlaybackRate(rate));
+  }
+
   onStateChange(listener: (state: PlayerState) => void): () => void {
     this.stateListeners.add(listener);
     return () => this.stateListeners.delete(listener);

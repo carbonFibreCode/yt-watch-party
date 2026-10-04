@@ -46,6 +46,8 @@ approve them. Every action reaches the whole room in real time over WebSockets.
   keyboard shortcuts (press `?` in a room for the list), a time preview when hovering the
   scrubber, theater mode, double-tap to jump 10 s (or toggle fullscreen in the middle), and
   controls that fade out in fullscreen while the video plays.
+- **Synced playback speed** (0.25×–2×): the host or a moderator sets it for everyone (`<` / `>`),
+  participants can ask for it, and it carries over to the next video and to late joiners.
 - **Accessible:** keyboard-operable, WCAG 2.1 AA audited in both themes, with a light and a dark
   theme.
 
@@ -173,7 +175,7 @@ and a fan-out p99 of 6 ms. Method, numbers and limits are in [`docs/loadtest.md`
 - **Embedding:** videos whose owners disable embedding can't play. They're rejected up front
   where YouTube reports it.
 - **Signing in mid-room** switches to the account's identity: you rejoin as that account.
-- **Out of scope:** playback-speed sync, non-YouTube sources, chat moderation and editing,
+- **Out of scope:** non-YouTube sources, chat moderation and editing,
   password reset and email verification.
 
 ## Project documents

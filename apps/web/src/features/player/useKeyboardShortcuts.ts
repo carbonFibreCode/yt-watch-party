@@ -1,6 +1,13 @@
+import { useRef } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import type { Options } from 'react-hotkeys-hook';
-import { SEEK_STEP_LONG_S, SEEK_STEP_S, VOLUME_STEP } from '@watchparty/shared';
+import {
+  PLAYBACK_RATES,
+  SEEK_COALESCE_MS,
+  SEEK_STEP_LONG_S,
+  SEEK_STEP_S,
+  VOLUME_STEP,
+} from '@watchparty/shared';
 import type { RequestableAction } from '@watchparty/shared';
 import { shortcut } from './shortcuts';
 import type { ShortcutId } from './shortcuts';
@@ -13,6 +20,8 @@ interface ShortcutOptions {
   readonly playing: boolean;
   /** Video length in seconds, once known. */
   readonly duration: number | null;
+  /** The room's current speed. */
+  readonly playbackRate: number;
   readonly send: (action: RequestableAction) => Promise<boolean>;
   /** Seeks that add up when repeated quickly (shared with the double-tap gestures). */
   readonly seekTo: RelativeSeek['seekTo'];
@@ -64,6 +73,8 @@ export const useKeyboardShortcuts = (o: ShortcutOptions): void => {
       enabled,
       preventDefault: true,
       ignoreEventWhen: ignore,
+      // `>` is the speed-up key, not react-hotkeys-hook's sequence separator (we use no sequences).
+      sequenceSplitKey: '|',
       ...(useKey === undefined ? {} : { useKey }),
     };
   };
@@ -130,6 +141,39 @@ export const useKeyboardShortcuts = (o: ShortcutOptions): void => {
     },
     options('restart', staff, ignoreArrowTargets),
     [seekTo],
+  );
+
+  /** The speed this client last asked for, until the room shows it (rapid > > steps twice). */
+  const pendingRate = useRef<{ readonly rate: number; readonly at: number } | null>(null);
+  /** Steps to the next standard speed in `direction`; nothing at either end of the list. */
+  const stepRate = (direction: 1 | -1): void => {
+    const pending = pendingRate.current;
+    const base =
+      pending !== null && pending.rate !== o.playbackRate && Date.now() - pending.at < SEEK_COALESCE_MS
+        ? pending.rate
+        : o.playbackRate;
+    const index = PLAYBACK_RATES.findIndex((rate) => rate === base);
+    const next = PLAYBACK_RATES[(index === -1 ? PLAYBACK_RATES.indexOf(1) : index) + direction];
+    if (next !== undefined) {
+      pendingRate.current = { rate: next, at: Date.now() };
+      void o.send({ type: 'set_rate', rate: next });
+    }
+  };
+  useHotkeys(
+    shortcut('speedUp').keys,
+    () => {
+      stepRate(1);
+    },
+    options('speedUp', staff),
+    [stepRate],
+  );
+  useHotkeys(
+    shortcut('speedDown').keys,
+    () => {
+      stepRate(-1);
+    },
+    options('speedDown', staff),
+    [stepRate],
   );
 
   useHotkeys(

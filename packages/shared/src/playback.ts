@@ -11,12 +11,16 @@ export interface PlaybackTimeline {
   /** Server epoch milliseconds. */
   readonly anchorTime: number;
   readonly duration: number | null;
+  /** Playback speed: video seconds per wall-clock second. */
+  readonly rate: number;
 }
 
 const MS_PER_SECOND = 1000;
 
 export const projectPosition = (timeline: PlaybackTimeline, nowMs: number): number => {
-  const elapsedS = timeline.isPlaying ? Math.max(0, nowMs - timeline.anchorTime) / MS_PER_SECOND : 0;
+  const elapsedS = timeline.isPlaying
+    ? (Math.max(0, nowMs - timeline.anchorTime) / MS_PER_SECOND) * timeline.rate
+    : 0;
   const position = timeline.anchorPosition + elapsedS;
   return timeline.duration === null ? position : Math.min(position, timeline.duration);
 };
@@ -27,4 +31,5 @@ export const timelineFromView = (view: PlaybackView): PlaybackTimeline => ({
   anchorPosition: view.currentTime,
   anchorTime: view.serverTime,
   duration: view.duration,
+  rate: view.playbackRate,
 });

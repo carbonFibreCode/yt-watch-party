@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CHAT_MAX_LEN, ROOM_CODE_LENGTH } from '../constants';
+import { CHAT_MAX_LEN, PLAYBACK_RATES, ROOM_CODE_LENGTH } from '../constants';
 import { CLIENT_EVENT_NAMES, ClientEventSchemas, RequestableAction } from './client-events';
 import { CreateRoomBody } from './http';
 import { AssignableRole, RoomCode } from './primitives';
@@ -45,6 +45,7 @@ describe('RequestableAction', () => {
     { type: 'seek', time: 30 },
     { type: 'change_video', url: URL_INPUT },
     { type: 'queue_add', url: URL_INPUT },
+    { type: 'set_rate', rate: 1.5 },
   ])('accepts $type', (action) => {
     expect(RequestableAction.safeParse(action).success).toBe(true);
   });
@@ -52,6 +53,7 @@ describe('RequestableAction', () => {
   it.each([
     ['moderation actions', { type: 'assign_role', userId: 'u1', role: 'moderator' }],
     ['seek without a time', { type: 'seek' }],
+    ['a speed outside the standard set', { type: 'set_rate', rate: 3 }],
     ['unknown extra fields', { type: 'play', force: true }],
   ])('rejects %s', (_label, action) => {
     expect(RequestableAction.safeParse(action).success).toBe(false);
@@ -61,6 +63,37 @@ describe('RequestableAction', () => {
     expect(RequestableAction.safeParse({ type: 'seek', time: -1 }).success).toBe(
       ClientEventSchemas.seek.safeParse({ time: -1 }).success,
     );
+  });
+});
+
+describe('set_rate', () => {
+  it.each(PLAYBACK_RATES)('accepts the standard speed %s', (rate) => {
+    expect(ClientEventSchemas.set_rate.safeParse({ rate }).success).toBe(true);
+  });
+
+  it.each([
+    ['too fast', 3],
+    ['zero', 0],
+    ['negative', -1],
+    ['between standard steps', 1.1],
+    ['a string', '1.5'],
+    ['NaN', Number.NaN],
+    ['Infinity', Number.POSITIVE_INFINITY],
+  ])('rejects %s', (_label, rate) => {
+    expect(ClientEventSchemas.set_rate.safeParse({ rate }).success).toBe(false);
+  });
+
+  it('rejects a missing rate and extra fields', () => {
+    expect(ClientEventSchemas.set_rate.safeParse({}).success).toBe(false);
+    expect(ClientEventSchemas.set_rate.safeParse({ rate: 1, force: true }).success).toBe(false);
+  });
+
+  it('the requestable form accepts exactly what the command accepts', () => {
+    for (const rate of [...PLAYBACK_RATES, 3, 0, 1.1]) {
+      expect(RequestableAction.safeParse({ type: 'set_rate', rate }).success).toBe(
+        ClientEventSchemas.set_rate.safeParse({ rate }).success,
+      );
+    }
   });
 });
 

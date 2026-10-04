@@ -36,6 +36,36 @@ describe('RoomSnapshotCodec', () => {
     expect(RoomSnapshotCodec.parse(JSON.parse(RoomSnapshotCodec.encode(snapshot)))).toEqual(snapshot);
   });
 
+  it('round-trips a speed and a pending speed request', () => {
+    const r = room();
+    r.setRate(1.5, 7);
+    r.join({ userId: 'u2', name: 'Pat' }, 8);
+    r.createRequest('u2', { type: 'set_rate', rate: 0.5 }, 'r2', 9);
+    const snapshot = r.toSnapshot();
+    const decoded = RoomSnapshotCodec.decode(RoomSnapshotCodec.encode(snapshot));
+    expect(decoded).toEqual(snapshot);
+    expect(decoded.playback.rate).toBe(1.5);
+    expect(decoded.requests.map((q) => q.action)).toContainEqual({ type: 'set_rate', rate: 0.5 });
+  });
+
+  it('loads a room saved before playback speed existed at normal speed', () => {
+    const value = JSON.parse(RoomSnapshotCodec.encode(room().toSnapshot())) as {
+      playback: Record<string, unknown>;
+    };
+    delete value.playback.rate;
+    const decoded = RoomSnapshotCodec.parse(value);
+    expect(decoded.playback.rate).toBe(1);
+    expect(Room.fromSnapshot(decoded).playback.rate).toBe(1);
+  });
+
+  it.each([0, -1, 'fast', null])('rejects a stored speed of %s', (rate) => {
+    const value = JSON.parse(RoomSnapshotCodec.encode(room().toSnapshot())) as {
+      playback: Record<string, unknown>;
+    };
+    value.playback.rate = rate;
+    expect(() => RoomSnapshotCodec.parse(value)).toThrow();
+  });
+
   it('rejects corrupt data instead of loading a broken aggregate', () => {
     expect(() => RoomSnapshotCodec.decode('{"id":"K7M2QX"}')).toThrow();
     expect(() => RoomSnapshotCodec.decode('not json')).toThrow();

@@ -22,6 +22,8 @@ const fakeFactory = () => {
     mute: vi.fn(() => Promise.resolve()),
     unMute: vi.fn(() => Promise.resolve()),
     setVolume: vi.fn(() => Promise.resolve()),
+    getPlaybackRate: vi.fn(() => Promise.resolve(1.5)),
+    setPlaybackRate: vi.fn(() => Promise.resolve()),
     destroy: vi.fn(() => Promise.resolve()),
   };
   const factory = vi.fn(() => player) as unknown as Factory;
@@ -88,6 +90,24 @@ describe('YouTubePlayerAdapter', () => {
     await adapter.setVolume(40);
     await adapter.setVolume(0);
     expect(player.setVolume.mock.calls).toEqual([[40], [0]]);
+  });
+
+  it('reads and sets the playback speed through the IFrame API', async () => {
+    const { factory, player } = fakeFactory();
+    const adapter = new YouTubePlayerAdapter(document.createElement('div'), factory);
+    expect(await adapter.getPlaybackRate()).toBe(1.5);
+    await adapter.setPlaybackRate(0.5);
+    expect(player.setPlaybackRate).toHaveBeenCalledWith(0.5);
+  });
+
+  it('fails a speed change that never settles instead of hanging', async () => {
+    vi.useFakeTimers();
+    const { factory, player } = fakeFactory();
+    player.setPlaybackRate.mockReturnValue(new Promise(() => undefined));
+    const adapter = new YouTubePlayerAdapter(document.createElement('div'), factory);
+    const change = adapter.setPlaybackRate(2);
+    vi.advanceTimersByTime(PLAYER_CALL_TIMEOUT_MS);
+    await expect(change).rejects.toBeInstanceOf(PlayerUnavailableError);
   });
 
   it('fails a volume change that never settles instead of hanging', async () => {

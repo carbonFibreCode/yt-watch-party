@@ -33,6 +33,7 @@ const createEmitters = (socket: RoomSocket): Emitters => {
     play: (p) => s().emitWithAck('play', p),
     pause: (p) => s().emitWithAck('pause', p),
     seek: (p) => s().emitWithAck('seek', p),
+    set_rate: (p) => s().emitWithAck('set_rate', p),
     change_video: (p) => s().emitWithAck('change_video', p),
     assign_role: (p) => s().emitWithAck('assign_role', p),
     remove_participant: (p) => s().emitWithAck('remove_participant', p),

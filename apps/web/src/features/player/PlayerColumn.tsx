@@ -33,6 +33,7 @@ export function PlayerColumn(): ReactElement {
   const toggleTheater = usePlayerPrefs((s) => s.toggleTheater);
   const pendingForStaff = usePendingRequestsForStaff();
   const [helpOpen, setHelpOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const playback = useRoom((s) => s.playback);
   const video = playback?.video ?? null;
   const playing = playback?.playState === 'playing';
@@ -47,7 +48,11 @@ export function PlayerColumn(): ReactElement {
     [playback, clock],
   );
   const seek = useRelativeSeek({ send: command.send, position, rev: playback?.rev ?? null, duration });
-  const autoHide = useAutoHide({ active: immersive.active, playing, keepVisible: pendingForStaff > 0 });
+  const autoHide = useAutoHide({
+    active: immersive.active,
+    playing,
+    keepVisible: pendingForStaff > 0 || menuOpen,
+  });
   const openHelp = useCallback(() => {
     setHelpOpen(true);
   }, []);
@@ -63,6 +68,7 @@ export function PlayerColumn(): ReactElement {
     hasVideo: video !== null,
     playing,
     duration,
+    playbackRate: playback?.playbackRate ?? 1,
     send: command.send,
     ...seek,
     ...audio,
@@ -82,6 +88,7 @@ export function PlayerColumn(): ReactElement {
       theater={theater}
       onShowShortcuts={openHelp}
       variant={variant}
+      onMenuOpenChange={setMenuOpen}
     />
   );
 

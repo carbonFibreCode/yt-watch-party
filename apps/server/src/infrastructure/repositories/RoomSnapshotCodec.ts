@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Role, RoomCode, UserId, VideoId } from '@watchparty/shared';
+import { DEFAULT_PLAYBACK_RATE, Role, RoomCode, UserId, VideoId } from '@watchparty/shared';
 import type { RoomSnapshot } from '../../domain/snapshot';
 
 /**
@@ -14,6 +14,7 @@ const RequestedActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('play') }),
   z.object({ type: z.literal('pause') }),
   z.object({ type: z.literal('seek'), time: z.number() }),
+  z.object({ type: z.literal('set_rate'), rate: z.number().positive() }),
   z.object({ type: z.literal('change_video'), video: VideoRefSchema, startAt: z.number() }),
   z.object({ type: z.literal('queue_add'), video: VideoRefSchema }),
 ]);
@@ -45,6 +46,8 @@ const RoomSnapshotSchema: z.ZodType<RoomSnapshot> = z.object({
     anchorTime: z.number(),
     duration: z.number().nullable(),
     rev: z.number().int().nonnegative(),
+    // Rooms saved before playback speed existed load at normal speed.
+    rate: z.number().positive().default(DEFAULT_PLAYBACK_RATE),
   }),
   queue: z.array(z.object({ id: z.string(), video: VideoRefSchema, addedBy: UserRefSchema })),
   requests: z.array(

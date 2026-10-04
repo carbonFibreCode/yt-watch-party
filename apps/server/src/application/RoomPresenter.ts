@@ -23,6 +23,8 @@ const actionView = (action: RequestedAction): RequestActionView => {
       return { type: action.type };
     case 'seek':
       return { type: 'seek', time: action.time };
+    case 'set_rate':
+      return { type: 'set_rate', rate: action.rate };
     case 'change_video':
     case 'queue_add':
       return { type: action.type, video: action.video };
@@ -50,6 +52,7 @@ export const RoomPresenter = {
       currentTime: playback.positionAt(now),
       serverTime: now,
       duration: playback.duration,
+      playbackRate: playback.rate,
       rev: playback.rev,
     };
   },

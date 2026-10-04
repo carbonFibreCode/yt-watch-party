@@ -266,6 +266,8 @@ test.describe('approvals while the host is in fullscreen', () => {
     const host = await createRoom(browser);
     await host.getByRole('button', { name: 'Play', exact: true }).click();
     const pat = await join(browser, host.url(), 'Pat');
+    // This test is about the approval UI: start from a viewer whose player is already playing.
+    await expect(player(pat)).toHaveAttribute('data-player-state', 'playing', { timeout: SYNC_TIMEOUT_MS });
     await host.getByRole('button', { name: 'Full screen', exact: true }).click();
     await expect.poll(() => isFullscreen(host)).toBe(true);
 
@@ -649,5 +651,138 @@ test.describe('auto-hiding fullscreen controls', () => {
     await expect(host.getByRole('button', { name: 'Pending requests (1)' })).toBeVisible();
     await host.waitForTimeout(4_000);
     await expect(controls(host)).toHaveAttribute('data-hidden', 'false');
+  });
+});
+
+test.describe('playback speed', () => {
+  const speedButton = (page: Page): Locator => page.getByRole('button', { name: /^Playback speed/ });
+  const pickSpeed = async (page: Page, label: string): Promise<void> => {
+    await speedButton(page).click();
+    await page.getByRole('menuitemradio', { name: label, exact: true }).click();
+  };
+  /** Video seconds the control bar advances over `ms` of wall time. */
+  const advanceOver = async (page: Page, ms: number): Promise<number> => {
+    const before = await shownSeconds(page);
+    await page.waitForTimeout(ms);
+    return (await shownSeconds(page)) - before;
+  };
+  const expectSmallDrift = async (page: Page): Promise<void> => {
+    await expect
+      .poll(
+        async () => {
+          const drift = await player(page).getAttribute('data-drift-ms');
+          return drift === null || drift === '' ? Number.POSITIVE_INFINITY : Math.abs(Number(drift));
+        },
+        { timeout: SYNC_TIMEOUT_MS },
+      )
+      .toBeLessThan(500);
+  };
+
+  test('the host sets 2× and everyone really plays at 2×, staying in sync', async ({ browser }) => {
+    const host = await createRoom(browser);
+    await host.getByRole('button', { name: 'Play', exact: true }).click();
+    const sam = await join(browser, host.url(), 'Sam');
+    await expect(player(sam)).toHaveAttribute('data-player-state', 'playing', { timeout: SYNC_TIMEOUT_MS });
+
+    await pickSpeed(host, '2×');
+    await expect(speedButton(sam)).toHaveAccessibleName('Playback speed: 2×');
+    await expectSmallDrift(sam);
+    // 5 s of wall time is about 10 s of video, for the room clock and for Sam's real player.
+    const advanced = await advanceOver(sam, 5_000);
+    expect(advanced).toBeGreaterThanOrEqual(8);
+    expect(advanced).toBeLessThanOrEqual(12);
+    await expectSmallDrift(sam);
+    await expectSmallDrift(host);
+    await expect(sam.getByText(/can't play at/)).toHaveCount(0);
+
+    // Back to normal.
+    await pickSpeed(host, 'Normal');
+    await expect(speedButton(sam)).toHaveAccessibleName('Playback speed: Normal');
+    const normal = await advanceOver(sam, 4_000);
+    expect(normal).toBeGreaterThanOrEqual(3);
+    expect(normal).toBeLessThanOrEqual(5);
+  });
+
+  test('a participant asks for 1.5×; nothing changes until the host approves', async ({ browser }) => {
+    const host = await createRoom(browser);
+    await host.getByRole('button', { name: 'Play', exact: true }).click();
+    const pat = await join(browser, host.url(), 'Pat');
+
+    await pickSpeed(pat, '1.5×');
+    await expect(pat.getByText('Asked the host for a speed change.')).toBeVisible();
+    const toast = host.locator('[data-sonner-toast]').filter({ hasText: 'Pat wants to play at 1.5× speed' });
+    await expect(toast).toBeVisible();
+    await host.waitForTimeout(500);
+    await expect(speedButton(host)).toHaveAccessibleName('Playback speed: Normal');
+
+    await toast.getByRole('button', { name: 'Approve' }).click();
+    await expect(speedButton(host)).toHaveAccessibleName('Playback speed: 1.5×');
+    await expect(speedButton(pat)).toHaveAccessibleName('Playback speed: 1.5×');
+    await expectSmallDrift(pat);
+  });
+
+  test('> and < step through the speeds for everyone; viewers see but cannot change it', async ({
+    browser,
+  }) => {
+    const host = await createRoom(browser);
+    await host.getByRole('button', { name: 'Play', exact: true }).click();
+    const vic = await join(browser, host.url(), 'Vic');
+    await makeViewer(host, 'Vic');
+
+    await focusPage(host);
+    await host.keyboard.press('>');
+    await expect(speedButton(vic)).toHaveAccessibleName('Playback speed: 1.25×');
+    await host.keyboard.press('>');
+    await expect(speedButton(vic)).toHaveAccessibleName('Playback speed: 1.5×');
+    await host.keyboard.press('<');
+    await expect(speedButton(vic)).toHaveAccessibleName('Playback speed: 1.25×');
+
+    await expect(speedButton(vic)).toBeDisabled();
+    await focusPage(vic);
+    await vic.keyboard.press('>');
+    await vic.waitForTimeout(500);
+    await expect(speedButton(host)).toHaveAccessibleName('Playback speed: 1.25×');
+  });
+
+  test('the speed carries over to the next video and to people who join later', async ({ browser }) => {
+    const host = await createRoom(browser);
+    await host.getByRole('button', { name: 'Play', exact: true }).click();
+    await pickSpeed(host, '1.5×');
+
+    await host.getByLabel('YouTube link').fill('https://youtu.be/jNQXAC9IVRw');
+    await host.getByRole('button', { name: 'Play now' }).click();
+    await expect(host.getByText('Me at the zoo')).toBeVisible({ timeout: SYNC_TIMEOUT_MS });
+    await expect(speedButton(host)).toHaveAccessibleName('Playback speed: 1.5×');
+    // That video is only 19 s (13 s at 1.5×): switch to a long one before someone joins late.
+    await host.getByLabel('YouTube link').fill(VIDEO);
+    await host.getByRole('button', { name: 'Play now' }).click();
+    await expect(host.getByText('Rick Astley', { exact: false }).first()).toBeVisible({
+      timeout: SYNC_TIMEOUT_MS,
+    });
+    await expect(speedButton(host)).toHaveAccessibleName('Playback speed: 1.5×');
+
+    const late = await join(browser, host.url(), 'Lee');
+    await expect(player(late)).toHaveAttribute('data-player-state', 'playing', { timeout: SYNC_TIMEOUT_MS });
+    await expect(speedButton(late)).toHaveAccessibleName('Playback speed: 1.5×');
+    await expectSmallDrift(late);
+    const advanced = await advanceOver(late, 4_000);
+    expect(advanced).toBeGreaterThanOrEqual(5);
+    expect(advanced).toBeLessThanOrEqual(7);
+  });
+
+  test('the speed menu works in fullscreen and keeps the controls visible while open', async ({
+    browser,
+  }) => {
+    const host = await createRoom(browser);
+    await host.getByRole('button', { name: 'Play', exact: true }).click();
+    await host.getByRole('button', { name: 'Full screen', exact: true }).click();
+    await speedButton(host).click();
+    const menu = host.getByRole('menu');
+    await expect(menu).toBeVisible();
+    await expectOnTop(menu.getByRole('menuitemradio', { name: '0.5×' }));
+    await host.waitForTimeout(4_000);
+    await expect(host.getByTestId('fullscreen-controls')).toHaveAttribute('data-hidden', 'false');
+    await menu.getByRole('menuitemradio', { name: '0.5×' }).click();
+    await expect(speedButton(host)).toHaveAccessibleName('Playback speed: 0.5×');
   });
 });

@@ -16,12 +16,14 @@ const setup = () => {
     durations: [] as [string, number][],
     ended: [] as [string, number][],
     drifts: [] as (number | null)[],
+    rateUnsupported: [] as boolean[],
   };
   const output: SyncEngineOutput = {
     durationKnown: (id, d) => events.durations.push([id, d]),
     ended: (id, rev) => events.ended.push([id, rev]),
     statusChanged: (s) => events.statuses.push(s),
     driftMeasured: (d) => events.drifts.push(d),
+    rateUnsupported: (u) => events.rateUnsupported.push(u),
   };
   const engine = new SyncEngine(player, clock, output);
   /** Room state as the server would send it right now. */
@@ -32,6 +34,7 @@ const setup = () => {
     currentTime: 0,
     serverTime: clock.now(),
     duration: null,
+    playbackRate: 1,
     rev: 1,
     ...overrides,
   });
@@ -336,6 +339,131 @@ describe('SyncEngine', () => {
       await engine.setMuted(true);
       expect(player.muted).toBe(true);
       expect(player.calls.filter((c) => c === 'mute' || c === 'unmute')).toEqual(['mute', 'unmute', 'mute']);
+    });
+  });
+
+  describe('playback speed', () => {
+    it('switches the player to the room speed and then tracks the 2× timeline without more seeks', async () => {
+      const { engine, player, state, settle, clock, events } = setup();
+      const start = clock.now();
+      await engine.apply(state({ playbackRate: 2 }));
+      await settle();
+      expect(player.rate).toBe(2);
+      await settle();
+      const seeksAfterSettling = player.calls.filter((c) => c.startsWith('seek')).length;
+      for (let i = 0; i < 5; i += 1) {
+        clock.advance(2_000);
+        await engine.tick();
+      }
+      // The room timeline at 2×: twice the elapsed wall time.
+      const expected = ((clock.now() - start) / 1000) * 2;
+      expect(Math.abs((await player.getCurrentTime()) - expected)).toBeLessThan(seekThresholdS);
+      expect(player.calls.filter((c) => c.startsWith('seek'))).toHaveLength(seeksAfterSettling);
+      expect(Math.abs(events.drifts.at(-1) ?? Infinity)).toBeLessThan(seekThresholdS);
+      expect(engine.status).toBe('in_sync');
+    });
+
+    it('follows a speed change from the room without seeking (the timeline re-anchors)', async () => {
+      const { engine, player, state, settle, clock, events } = setup();
+      await engine.apply(state());
+      await settle();
+      clock.advance(10_000);
+      await engine.apply(state({ currentTime: await player.getCurrentTime(), playbackRate: 0.5, rev: 2 }));
+      expect(player.rate).toBe(0.5);
+      clock.advance(4_000);
+      await engine.tick();
+      expect(player.calls.filter((c) => c.startsWith('seek'))).toEqual([]);
+      expect(Math.abs(events.drifts.at(-1) ?? Infinity)).toBeLessThan(seekThresholdS);
+    });
+
+    it('learns the buffering lag in wall time, so it is right at any speed', async () => {
+      const { engine, player, state, settle, clock, events } = setup();
+      player.seekLagMs = 400;
+      const start = clock.now();
+      await engine.apply(state({ playbackRate: 2 }));
+      for (let i = 0; i < 8; i += 1) {
+        await settle();
+      }
+      const expected = ((clock.now() - start) / 1000) * 2;
+      expect(Math.abs((await player.getCurrentTime()) - expected)).toBeLessThan(seekThresholdS);
+      expect(Math.abs(events.drifts.at(-1) ?? Infinity)).toBeLessThan(seekThresholdS);
+    });
+
+    it('does not touch the player when it already plays at the room speed', async () => {
+      const { engine, player, state, settle } = setup();
+      await engine.apply(state());
+      await settle();
+      await settle();
+      expect(player.calls.some((c) => c.startsWith('rate:'))).toBe(false);
+    });
+
+    it('puts the speed back if the player resets it on its own', async () => {
+      const { engine, player, state, settle } = setup();
+      await engine.apply(state({ playbackRate: 1.5 }));
+      await settle();
+      player.rate = 1;
+      await settle();
+      expect(player.rate).toBe(1.5);
+    });
+
+    it('applies the speed while paused too, so resuming is already at speed', async () => {
+      const { engine, player, state, settle } = setup();
+      await engine.apply(state({ playState: 'paused', playbackRate: 0.75 }));
+      await settle();
+      expect(player.rate).toBe(0.75);
+      expect(player.state).not.toBe('playing');
+    });
+
+    it('reports a speed the video refuses only after asking, and clears it when it matches again', async () => {
+      const { engine, player, state, settle, events } = setup();
+      player.supportedRates = [1];
+      await engine.apply(state({ playbackRate: 2 }));
+      // Asked at load; not reported until a later pass shows the player still disagrees.
+      expect(events.rateUnsupported).toEqual([]);
+      await settle();
+      expect(events.rateUnsupported).toEqual([true]);
+      await settle();
+      expect(events.rateUnsupported).toEqual([true]);
+      await engine.apply(state({ playbackRate: 1, rev: 2 }));
+      expect(events.rateUnsupported).toEqual([true, false]);
+    });
+
+    it('a newly requested speed gets a fresh chance before being reported again', async () => {
+      const { engine, player, state, settle, events } = setup();
+      player.supportedRates = [1, 1.5];
+      await engine.apply(state({ playbackRate: 2 }));
+      await settle();
+      await settle();
+      expect(events.rateUnsupported).toEqual([true]);
+      await engine.apply(state({ playbackRate: 1.5, rev: 2 }));
+      expect(events.rateUnsupported).toEqual([true, false]);
+      expect(player.rate).toBe(1.5);
+    });
+
+    it('a new video gets a fresh chance at the room speed', async () => {
+      const { engine, player, state, settle, events } = setup();
+      player.supportedRates = [1];
+      await engine.apply(state({ playbackRate: 2 }));
+      await settle();
+      await settle();
+      expect(events.rateUnsupported).toEqual([true]);
+      player.supportedRates = [1, 2];
+      await engine.apply(state({ videoId: OTHER, playbackRate: 2, rev: 2 }));
+      expect(events.rateUnsupported).toEqual([true, false]);
+      await settle();
+      expect(player.rate).toBe(2);
+      await settle();
+      expect(events.rateUnsupported).toEqual([true, false]);
+    });
+
+    it('reports the end of a sped-up video at its real end', async () => {
+      const { engine, player, state, settle, clock, events } = setup();
+      player.duration = 20;
+      await engine.apply(state({ playbackRate: 2, duration: 20 }));
+      await settle();
+      clock.advance(8_500);
+      player.emitState('ended');
+      expect(events.ended).toEqual([[VIDEO, 1]]);
     });
   });
 

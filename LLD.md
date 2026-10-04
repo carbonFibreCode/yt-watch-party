@@ -299,6 +299,7 @@ export const ClientEventSchemas = {
   play:               z.object({}),
   pause:              z.object({}),
   seek:               z.object({ time: Seconds }),
+  set_rate:           z.object({ rate: PlaybackRateSchema }),      // one of PLAYBACK_RATES
   change_video:       z.object({ url: VideoUrl }),
   assign_role:        z.object({ userId: UserId, role: AssignableRole }),
   remove_participant: z.object({ userId: UserId }),
@@ -545,18 +546,20 @@ class PlaybackState {
     readonly anchorTime: number,        // server epoch ms
     readonly duration: number | null,
     readonly rev: number,
+    readonly rate: number,              // playback speed, video seconds per wall second
   ) {}
   positionAt(now: number): number { return projectPosition(this, now); }   // shared fn (DRY with client)
   play(now)  { return this.isPlaying ? this : this.with({ isPlaying: true,  anchorPosition: this.positionAt(now), anchorTime: now }); }
   pause(now) { return !this.isPlaying ? this : this.with({ isPlaying: false, anchorPosition: this.positionAt(now), anchorTime: now }); }
   seek(t, now) { return this.with({ anchorPosition: clamp(t, 0, this.duration ?? Infinity), anchorTime: now }); }
-  load(video, now) { return new PlaybackState(video, true, 0, now, null, this.rev + 1); }
+  load(video, now) { return new PlaybackState(video, true, 0, now, null, this.rev + 1, this.rate); }   // keeps the speed
+  setRate(r, now) { return r === this.rate ? this : this.with({ anchorPosition: this.positionAt(now), anchorTime: now, rate: r }); }
   private with(p: Partial<...>) { return new PlaybackState(..., this.rev + 1); }   // every change bumps rev
 }
 
 // shared/playback.ts
-export const projectPosition = (s: { isPlaying; anchorPosition; anchorTime; duration }, now: number) => {
-  const p = s.anchorPosition + (s.isPlaying ? (now - s.anchorTime) / 1000 : 0);
+export const projectPosition = (s: { isPlaying; anchorPosition; anchorTime; duration; rate }, now: number) => {
+  const p = s.anchorPosition + (s.isPlaying ? ((now - s.anchorTime) / 1000) * s.rate : 0);
   return s.duration ? Math.min(p, s.duration) : p;
 };
 ```
@@ -564,9 +567,9 @@ export const projectPosition = (s: { isPlaying; anchorPosition; anchorTime; dura
 **How.**
 - `play()` while already playing and `pause()` while already paused are no-ops. They don't bump `rev`, so they don't broadcast. This makes repeated clicks idempotent.
 - Wire format (`PlaybackView`, the brief's `sync_state`), with extra fields added:
-  `{ videoId, video: {title, thumbnailUrl} | null, playState: 'playing'|'paused'|'idle', currentTime: positionAt(serverTime), serverTime, duration, rev }`.
+  `{ videoId, video: {title, thumbnailUrl} | null, playState: 'playing'|'paused'|'idle', currentTime: positionAt(serverTime), serverTime, duration, playbackRate, rev }`.
   The client re-projects `currentTime` from `serverTime` using its clock offset (SP-12).
-- Playback rate is fixed at 1×, so there's no rate field (Non-Goal).
+- **Playback speed** (`set_rate`, one of YouTube's standard speeds `PLAYBACK_RATES`) is room state like position: staff set it, participants request it. Changing it re-anchors at the current position, so positions stay continuous. A new video keeps the room's speed. Snapshots saved before speed existed load at 1× (codec default). Clients apply it every reconcile pass (YouTube can reset it); a speed the video refuses is shown to that viewer, whose drift correction keeps them in place. The client's learned seek lead is kept in wall-clock seconds and scaled by the speed.
 - **Duration discovery.** oEmbed doesn't return duration. The first client whose player loads the video sends `report_duration`. The server keeps the first value for the current `videoId`, accepted from any member and bounded by schema. Duration is used to clamp `seek` and to validate `video_ended`.
 - **End of video.** Clients send `video_ended {videoId, rev}` when the player reports ENDED. The server accepts it only if `videoId` and `rev` match the current ones and `positionAt(now) ≥ duration − END_TOLERANCE_S`. On acceptance it loads the next queue item, or pauses at the end. The first valid report wins and later ones are stale, so the operation is idempotent.
 
@@ -823,6 +826,7 @@ export const RequestableAction = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('play'), ...play.shape }),   // command payload shapes reused (zod 4: spread .shape)
   z.strictObject({ type: z.literal('pause'), ...pause.shape }),
   z.strictObject({ type: z.literal('seek'), ...seek.shape }),
+  z.strictObject({ type: z.literal('set_rate'), ...setRate.shape }),
   z.strictObject({ type: z.literal('change_video'), ...changeVideo.shape }),
   z.strictObject({ type: z.literal('queue_add'), ...queueAdd.shape }),
 ]);
@@ -1432,7 +1436,6 @@ sequenceDiagram
 ## Non-Goals
 
 Deliberately excluded and stated here so nothing is half-built:
-- Playback-rate sync
 - Video sources other than YouTube
 - YouTube search inside the app
 - Voice/video chat

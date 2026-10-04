@@ -36,6 +36,9 @@ export const timeAgo = (at: number, now: number): string => {
   return 'just now';
 };
 
+/** Playback speed as YouTube shows it: 1 → "Normal", 1.5 → "1.5×", 0.25 → "0.25×". */
+export const formatRate = (rate: number): string => (rate === 1 ? 'Normal' : `${String(rate)}×`);
+
 /** 75 → "1:15", 3725 → "1:02:05". */
 export const formatDuration = (seconds: number): string => {
   const total = Math.max(0, Math.floor(seconds));

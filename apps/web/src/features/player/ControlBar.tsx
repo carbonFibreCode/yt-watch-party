@@ -21,6 +21,7 @@ import { formatDuration } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { ControlHint } from './ControlHint';
 import { hintFor } from './controlHints';
+import { SpeedMenu } from './SpeedMenu';
 import type { PlaybackCommand } from './usePlaybackCommand';
 import { usePlaybackPosition } from './usePlaybackPosition';
 
@@ -47,6 +48,8 @@ interface ControlBarProps {
   readonly onShowShortcuts: () => void;
   /** `overlay`: drawn over the video in fullscreen. */
   readonly variant: 'docked' | 'overlay';
+  /** A menu in the bar opened or closed (keeps fullscreen controls from auto-hiding). */
+  readonly onMenuOpenChange?: (open: boolean) => void;
 }
 
 const volumeIcon = (muted: boolean, volume: number): ReactElement =>
@@ -65,8 +68,10 @@ export function ControlBar({
   theater,
   onShowShortcuts,
   variant,
+  onMenuOpenChange,
 }: ControlBarProps): ReactElement {
   const playState = useRoom((s) => s.playback?.playState ?? 'idle');
+  const rate = useRoom((s) => s.playback?.playbackRate ?? 1);
   const position = usePlaybackPosition();
   const [scrubbing, setScrubbing] = useState<number | null>(null);
   const [hover, setHover] = useState<{ readonly fraction: number; readonly time: number } | null>(null);
@@ -198,6 +203,13 @@ export function ControlBar({
 
         <div className="flex-1" />
 
+        <SpeedMenu
+          command={command}
+          rate={rate}
+          hasVideo={hasVideo}
+          overlay={overlay}
+          {...(onMenuOpenChange === undefined ? {} : { onOpenChange: onMenuOpenChange })}
+        />
         {overlay && <PendingRequestsButton />}
         <ControlHint hint="Keyboard shortcuts (?)">
           <Button

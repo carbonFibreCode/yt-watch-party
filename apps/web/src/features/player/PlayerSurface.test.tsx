@@ -7,12 +7,13 @@ import { PlayerSurface } from './PlayerSurface';
 import type { SyncStatus } from './SyncEngine';
 import type { PlayerSync } from './usePlayerSync';
 
-const sync = (status: SyncStatus): PlayerSync => ({
+const sync = (status: SyncStatus, rateUnsupported = false): PlayerSync => ({
   status,
   unavailable: false,
   playerState: 'playing',
   duration: null,
   driftMs: null,
+  rateUnsupported,
   resume: vi.fn(),
   volume: 100,
   muted: status === 'muted',
@@ -61,6 +62,33 @@ describe('PlayerSurface', () => {
     const button = screen.getByRole('button', { name: /Tap to unmute/ });
     expect(button.className).toContain('top-12');
     expect(button.className).not.toContain('bottom-3');
+  });
+});
+
+describe('PlayerSurface speed badge', () => {
+  const renderWith = (rateUnsupported: boolean, playbackRate = 1.5, hasVideo = true) =>
+    renderInRoom(
+      <PlayerSurface containerRef={createRef()} sync={sync('in_sync', rateUnsupported)} canControl />,
+      roomHarness('host', {
+        playback: hasVideo
+          ? playback({ playbackRate })
+          : playback({ videoId: null, video: null, playState: 'idle', playbackRate }),
+      }),
+    );
+
+  it('tells this viewer when their player cannot play at the room speed', () => {
+    renderWith(true, 1.5);
+    expect(screen.getByRole('status')).toHaveTextContent("This video can't play at 1.5× on your device");
+  });
+
+  it('shows nothing while the speed works', () => {
+    renderWith(false);
+    expect(screen.queryByText(/can't play at/)).toBeNull();
+  });
+
+  it('shows nothing without a video', () => {
+    renderWith(true, 1.5, false);
+    expect(screen.queryByText(/can't play at/)).toBeNull();
   });
 });
 

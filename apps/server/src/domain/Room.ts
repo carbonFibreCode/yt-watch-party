@@ -251,6 +251,10 @@ export class Room {
     this.applyPlayback(this.playbackState.seek(time, now));
   }
 
+  setRate(rate: number, now: number): void {
+    this.applyPlayback(this.playbackState.setRate(rate, now));
+  }
+
   changeVideo(video: VideoRef, startAt: number, now: number): void {
     this.applyPlayback(this.playbackState.load(video, startAt, now, true));
   }

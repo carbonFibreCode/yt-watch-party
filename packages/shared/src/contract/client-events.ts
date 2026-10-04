@@ -3,6 +3,7 @@ import {
   AssignableRole,
   ChatText,
   EntityId,
+  PlaybackRateSchema,
   ReactionEmoji,
   Revision,
   RoomCode,
@@ -20,6 +21,7 @@ const pause = Empty;
 const seek = z.strictObject({ time: Seconds });
 const changeVideo = z.strictObject({ url: VideoUrl });
 const queueAdd = z.strictObject({ url: VideoUrl });
+const setRate = z.strictObject({ rate: PlaybackRateSchema });
 
 /**
  * A playback change a participant may ask staff to approve (LLD SP-10).
@@ -31,6 +33,7 @@ export const RequestableAction = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('seek'), ...seek.shape }),
   z.strictObject({ type: z.literal('change_video'), ...changeVideo.shape }),
   z.strictObject({ type: z.literal('queue_add'), ...queueAdd.shape }),
+  z.strictObject({ type: z.literal('set_rate'), ...setRate.shape }),
 ]);
 export type RequestableAction = z.infer<typeof RequestableAction>;
 export type RequestableActionType = RequestableAction['type'];
@@ -43,6 +46,7 @@ export const ClientEventSchemas = {
   play,
   pause,
   seek,
+  set_rate: setRate,
   change_video: changeVideo,
   assign_role: z.strictObject({ userId: UserId, role: AssignableRole }),
   remove_participant: z.strictObject({ userId: UserId }),
@@ -91,6 +95,7 @@ export interface AckData {
   play: EmptyAck;
   pause: EmptyAck;
   seek: EmptyAck;
+  set_rate: EmptyAck;
   change_video: EmptyAck;
   assign_role: EmptyAck;
   remove_participant: EmptyAck;

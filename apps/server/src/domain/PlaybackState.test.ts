@@ -44,6 +44,66 @@ describe('PlaybackState', () => {
     });
   });
 
+  describe('setRate', () => {
+    it('starts at normal speed', () => {
+      expect(PlaybackState.idle(T0).rate).toBe(1);
+      expect(loaded().rate).toBe(1);
+    });
+
+    it('ignores a speed change without a video', () => {
+      const idle = PlaybackState.idle(T0);
+      expect(idle.setRate(2, T0)).toBe(idle);
+    });
+
+    it('ignores the same speed (no revision bump, no broadcast)', () => {
+      const state = loaded();
+      expect(state.setRate(1, T0 + 1_000)).toBe(state);
+    });
+
+    it('keeps the position continuous across the change and advances at the new speed', () => {
+      const fast = loaded().setRate(2, T0 + 10_000);
+      expect(fast.rate).toBe(2);
+      expect(fast.rev).toBe(2);
+      expect(fast.positionAt(T0 + 10_000)).toBe(10);
+      expect(fast.positionAt(T0 + 15_000)).toBe(20);
+      const slow = fast.setRate(0.5, T0 + 15_000);
+      expect(slow.positionAt(T0 + 15_000)).toBe(20);
+      expect(slow.positionAt(T0 + 19_000)).toBe(22);
+    });
+
+    it('changing speed while paused keeps the paused position', () => {
+      const paused = loaded()
+        .pause(T0 + 4_000)
+        .setRate(1.5, T0 + 9_000);
+      expect(paused.playState).toBe('paused');
+      expect(paused.positionAt(T0 + 60_000)).toBe(4);
+      expect(paused.play(T0 + 10_000).positionAt(T0 + 12_000)).toBe(7);
+    });
+
+    it('the speed survives pause, play, seek, duration reports, finishing and new videos', () => {
+      const fast = loaded().setRate(1.5, T0);
+      expect(fast.pause(T0 + 2_000).rate).toBe(1.5);
+      expect(fast.pause(T0 + 2_000).play(T0 + 3_000).rate).toBe(1.5);
+      expect(fast.seek(50, T0 + 1_000).rate).toBe(1.5);
+      expect(fast.seek(50, T0 + 1_000).positionAt(T0 + 3_000)).toBe(53);
+      expect(fast.withDuration(video().id, 300).rate).toBe(1.5);
+      expect(fast.withDuration(video().id, 300).finish(T0 + 1_000).rate).toBe(1.5);
+      expect(fast.load(video('aaaaaaaaaaa'), 0, T0 + 1_000, true).rate).toBe(1.5);
+    });
+
+    it('still stops at the end of the video at a fast speed', () => {
+      const fast = loaded().withDuration(video().id, 30).setRate(2, T0);
+      expect(fast.positionAt(T0 + 60_000)).toBe(30);
+    });
+
+    it('round-trips through a snapshot', () => {
+      const fast = loaded().setRate(0.75, T0 + 1_000);
+      const restored = PlaybackState.fromSnapshot(fast.toSnapshot());
+      expect(restored.rate).toBe(0.75);
+      expect(restored.positionAt(T0 + 5_000)).toBe(fast.positionAt(T0 + 5_000));
+    });
+  });
+
   describe('play / pause', () => {
     it('pausing anchors the projected position', () => {
       const paused = loaded().pause(T0 + 3_000);

@@ -22,6 +22,9 @@ export class FakePlayer implements VideoPlayer {
   state: PlayerState = 'unstarted';
   muted = false;
   volume = 100;
+  rate = 1;
+  /** Speeds this video supports (like YouTube's getAvailablePlaybackRates); others are ignored. */
+  supportedRates: readonly number[] = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
   /** Browser refuses unmuted programmatic play. */
   blockUnmutedAutoplay = false;
   /** Browser refuses even muted play. */
@@ -43,7 +46,8 @@ export class FakePlayer implements VideoPlayer {
   }
 
   private position(): number {
-    const elapsed = this.state === 'playing' ? Math.max(0, this.clock.now() - this.anchorTime) / 1000 : 0;
+    const elapsed =
+      this.state === 'playing' ? (Math.max(0, this.clock.now() - this.anchorTime) / 1000) * this.rate : 0;
     return Math.min(this.anchorPosition + elapsed, this.duration);
   }
 
@@ -133,6 +137,19 @@ export class FakePlayer implements VideoPlayer {
   setVolume(volume: number): Promise<void> {
     this.calls.push(`volume:${String(volume)}`);
     this.volume = volume;
+    return Promise.resolve();
+  }
+
+  getPlaybackRate(): Promise<number> {
+    return Promise.resolve(this.rate);
+  }
+
+  setPlaybackRate(rate: number): Promise<void> {
+    this.calls.push(`rate:${String(rate)}`);
+    if (this.supportedRates.includes(rate)) {
+      this.reanchor();
+      this.rate = rate;
+    }
     return Promise.resolve();
   }
 

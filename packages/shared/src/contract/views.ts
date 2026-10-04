@@ -29,6 +29,8 @@ export interface PlaybackView {
   readonly currentTime: number;
   readonly serverTime: number;
   readonly duration: number | null;
+  /** Playback speed for everyone in the room (1 = normal). */
+  readonly playbackRate: number;
   readonly rev: number;
 }
 
@@ -42,6 +44,7 @@ export type RequestActionView =
   | { readonly type: 'play' }
   | { readonly type: 'pause' }
   | { readonly type: 'seek'; readonly time: number }
+  | { readonly type: 'set_rate'; readonly rate: number }
   | { readonly type: 'change_video'; readonly video: VideoView }
   | { readonly type: 'queue_add'; readonly video: VideoView };
 

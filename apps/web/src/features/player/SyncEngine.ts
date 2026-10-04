@@ -27,6 +27,8 @@ export interface SyncEngineOutput {
   statusChanged(status: SyncStatus): void;
   /** Drift (actual − expected, seconds) measured on the last check; null when not measurable. */
   driftMeasured(driftS: number | null): void;
+  /** This player could not switch to the room's speed (the video does not support it). */
+  rateUnsupported(unsupported: boolean): void;
 }
 
 export interface SyncConfig {
@@ -80,13 +82,19 @@ export class SyncEngine {
   private target: PlaybackView | null = null;
   private loadedVideoId: VideoId | null = null;
   private lastSeekAt = Number.NEGATIVE_INFINITY;
-  /** Learned buffering lag (s) added to positions when seeking/loading while playing. */
+  /**
+   * Learned buffering lag in wall-clock seconds. Seeks/loads while playing land ahead by this lag
+   * times the speed (at 2× the video moves twice as far while the player buffers).
+   */
   private seekLeadS = 0;
   /** The next measurement shows how far behind the last playing seek/load landed. */
   private learnLead = false;
   private playRequestedAt: number | null = null;
   private durationReportedFor: VideoId | null = null;
   private endedReportedRev: number | null = null;
+  /** The speed last sent to the player; a mismatch after a later pass means it was refused. */
+  private rateRequested: number | null = null;
+  private rateRefused = false;
   private currentStatus: SyncStatus = 'idle';
   private queue: Promise<void> = Promise.resolve();
   private readonly unsubscribe: (() => void)[];
@@ -183,8 +191,13 @@ export class SyncEngine {
     const shouldPlay = target.playState === 'playing';
 
     if (this.loadedVideoId !== target.videoId) {
-      await this.player.load(target.videoId, this.seekPosition(expected, shouldPlay), shouldPlay);
+      await this.player.load(target.videoId, this.seekPosition(expected, shouldPlay, target), shouldPlay);
       this.loadedVideoId = target.videoId;
+      // A new video may support speeds the last one did not (and YouTube may reset the speed).
+      // Ask right away, so the first measurement after loading already runs at the room's speed.
+      this.rateRequested = null;
+      this.setRateRefused(false);
+      await this.enforceRate(target.playbackRate);
       this.lastSeekAt = now;
       this.learnLead = shouldPlay;
       this.playRequestedAt = shouldPlay ? now : null;
@@ -199,6 +212,7 @@ export class SyncEngine {
     if (state === 'ended') {
       return;
     }
+    const rateChanged = await this.enforceRate(target.playbackRate);
 
     // Drift correction waits out the cooldown; play/pause below is always enforced.
     if (now - this.lastSeekAt >= this.config.postSeekCooldownMs) {
@@ -213,15 +227,16 @@ export class SyncEngine {
       }
       const drift = actual - expected;
       this.output.driftMeasured(drift);
-      if (this.learnLead && state === 'playing') {
+      // A measurement taken while the speed was still wrong says nothing about buffering lag.
+      if (this.learnLead && state === 'playing' && !rateChanged) {
         this.learnLead = false;
         if (Math.abs(drift) <= MAX_LEARNABLE_DRIFT_S) {
-          const lead = this.seekLeadS - drift * SEEK_LEAD_LEARNING_RATE;
+          const lead = this.seekLeadS - (drift / target.playbackRate) * SEEK_LEAD_LEARNING_RATE;
           this.seekLeadS = Math.min(Math.max(lead, 0), this.config.maxSeekLeadS);
         }
       }
       if (Math.abs(drift) > this.config.seekThresholdS) {
-        await this.player.seekTo(this.seekPosition(expected, shouldPlay));
+        await this.player.seekTo(this.seekPosition(expected, shouldPlay, target));
         this.lastSeekAt = now;
         this.learnLead = shouldPlay;
       }
@@ -261,9 +276,36 @@ export class SyncEngine {
     await this.player.play();
   }
 
+  /**
+   * Keeps the player at the room's speed. YouTube applies a speed asynchronously and silently
+   * ignores one the video does not support, so a mismatch only counts as refused when it is still
+   * there on a later pass after asking. Asking every pass also undoes YouTube resetting the speed.
+   */
+  /** Returns whether the player was not at the room's speed (so this pass ran at the wrong one). */
+  private async enforceRate(rate: number): Promise<boolean> {
+    const current = await this.player.getPlaybackRate();
+    if (current === rate) {
+      this.rateRequested = rate;
+      this.setRateRefused(false);
+      return false;
+    }
+    // Still not there after asking for this speed: refused. A newly asked speed gets a fresh chance.
+    this.setRateRefused(this.rateRequested === rate);
+    this.rateRequested = rate;
+    await this.player.setPlaybackRate(rate);
+    return true;
+  }
+
+  private setRateRefused(refused: boolean): void {
+    if (refused !== this.rateRefused) {
+      this.rateRefused = refused;
+      this.output.rateUnsupported(refused);
+    }
+  }
+
   /** Where to send the player: ahead by the learned lag while playing, exact while paused. */
-  private seekPosition(expected: number, playing: boolean): number {
-    return playing ? expected + this.seekLeadS : expected;
+  private seekPosition(expected: number, playing: boolean, target: PlaybackView): number {
+    return playing ? expected + this.seekLeadS * target.playbackRate : expected;
   }
 
   private onPlayerState(state: PlayerState): void {

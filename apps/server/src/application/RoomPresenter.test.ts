@@ -29,7 +29,26 @@ describe('RoomPresenter', () => {
       currentTime: 12,
       serverTime: T0 + 2_000,
       duration: null,
+      playbackRate: 1,
       rev: 1,
+    });
+  });
+
+  it('presents the speed, and projects the position with it', () => {
+    const r = room();
+    r.setRate(2, T0);
+    expect(RoomPresenter.playback(r, T0 + 2_000)).toMatchObject({ playbackRate: 2, currentTime: 14, rev: 2 });
+  });
+
+  it('presents a requested speed change', () => {
+    const r = Room.create({ id: 'K7M2QX', name: 'x', host: { userId: 'h', name: 'Hana' }, now: T0 });
+    r.join({ userId: 'h', name: 'Hana' }, T0);
+    r.join({ userId: 'p', name: 'Pat' }, T0);
+    r.changeVideo(VIDEO, 0, T0);
+    r.createRequest('p', { type: 'set_rate', rate: 1.5 }, 'r9', T0);
+    expect(RoomPresenter.roomView(r, 'h', T0).pendingRequests.at(-1)?.action).toEqual({
+      type: 'set_rate',
+      rate: 1.5,
     });
   });
 

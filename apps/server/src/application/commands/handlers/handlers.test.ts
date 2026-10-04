@@ -44,6 +44,48 @@ describe('command handlers', () => {
       expect(await ctx.h.send(ctx[who], 'seek', { time: 5 })).toMatchObject({ error: { code: 'FORBIDDEN' } });
     });
 
+    it('lets staff change the speed for everyone; the same speed is a silent no-op', async () => {
+      const { h, roomId, mod } = await party();
+      await h.send(mod, 'change_video', { url: VIDEO_URL });
+      h.broadcaster.clear();
+      expect(await h.send(mod, 'set_rate', { rate: 1.5 })).toEqual({ ok: true, data: {} });
+      expect((await h.rooms.read(roomId)).playback.rate).toBe(1.5);
+      expect(h.broadcaster.eventTypes()).toEqual(['PlaybackChanged']);
+      expect(await h.send(mod, 'set_rate', { rate: 1.5 })).toMatchObject({ ok: true });
+      expect(h.broadcaster.eventTypes()).toEqual(['PlaybackChanged']);
+    });
+
+    it.each(['part', 'viewer'] as const)('forbids a %s from changing the speed directly', async (who) => {
+      const ctx = await party();
+      await ctx.h.send(ctx.host, 'change_video', { url: VIDEO_URL });
+      expect(await ctx.h.send(ctx[who], 'set_rate', { rate: 2 })).toMatchObject({
+        error: { code: 'FORBIDDEN' },
+      });
+      expect((await ctx.h.rooms.read(ctx.roomId)).playback.rate).toBe(1);
+    });
+
+    it.each([3, 0, 1.1, '2'])('rejects a non-standard speed %s', async (rate) => {
+      const { h, host } = await party();
+      await h.send(host, 'change_video', { url: VIDEO_URL });
+      expect(await h.send(host, 'set_rate', { rate })).toMatchObject({
+        error: { code: 'VALIDATION_FAILED' },
+      });
+    });
+
+    it('a viewer cannot even request a speed change; a participant can, and approval applies it', async () => {
+      const { h, roomId, host, part, viewer } = await party();
+      await h.send(host, 'change_video', { url: VIDEO_URL });
+      expect(await h.send(viewer, 'request_action', { action: { type: 'set_rate', rate: 2 } })).toMatchObject(
+        { error: { code: 'FORBIDDEN' } },
+      );
+      const asked = await h.send(part, 'request_action', { action: { type: 'set_rate', rate: 0.5 } });
+      expect(asked).toMatchObject({ ok: true });
+      const requestId = (asked as { data: { requestId: string } }).data.requestId;
+      expect((await h.rooms.read(roomId)).playback.rate).toBe(1);
+      expect(await h.send(host, 'resolve_request', { requestId, approve: true })).toMatchObject({ ok: true });
+      expect((await h.rooms.read(roomId)).playback.rate).toBe(0.5);
+    });
+
     it('reports invalid and non-embeddable videos without changing state', async () => {
       const { h, host } = await party();
       h.metadata.failures.set('aaaaaaaaaaa', 'EMBED_DISABLED');

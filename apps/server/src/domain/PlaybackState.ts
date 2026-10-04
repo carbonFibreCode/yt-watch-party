@@ -1,4 +1,4 @@
-import { projectPosition } from '@watchparty/shared';
+import { DEFAULT_PLAYBACK_RATE, projectPosition } from '@watchparty/shared';
 import type { PlaybackTimeline, PlayState, VideoId } from '@watchparty/shared';
 import type { VideoRef } from './VideoRef';
 
@@ -19,14 +19,15 @@ export class PlaybackState implements PlaybackTimeline {
     readonly anchorTime: number,
     readonly duration: number | null,
     readonly rev: number,
+    readonly rate: number,
   ) {}
 
   static idle(now: number): PlaybackState {
-    return new PlaybackState(null, false, 0, now, null, 0);
+    return new PlaybackState(null, false, 0, now, null, 0, DEFAULT_PLAYBACK_RATE);
   }
 
   static fromSnapshot(s: PlaybackSnapshot): PlaybackState {
-    return new PlaybackState(s.video, s.isPlaying, s.anchorPosition, s.anchorTime, s.duration, s.rev);
+    return new PlaybackState(s.video, s.isPlaying, s.anchorPosition, s.anchorTime, s.duration, s.rev, s.rate);
   }
 
   toSnapshot(): PlaybackSnapshot {
@@ -37,6 +38,7 @@ export class PlaybackState implements PlaybackTimeline {
       anchorTime: this.anchorTime,
       duration: this.duration,
       rev: this.rev,
+      rate: this.rate,
     };
   }
 
@@ -74,8 +76,20 @@ export class PlaybackState implements PlaybackTimeline {
     return this.next({ anchorPosition: this.clamp(time), anchorTime: now });
   }
 
+  /** A new video keeps the room's speed (YouTube keeps it across videos in a session too). */
   load(video: VideoRef, startAt: number, now: number, autoplay: boolean): PlaybackState {
-    return new PlaybackState(video, autoplay, Math.max(0, startAt), now, null, this.rev + 1);
+    return new PlaybackState(video, autoplay, Math.max(0, startAt), now, null, this.rev + 1, this.rate);
+  }
+
+  /**
+   * Changes the speed. Re-anchors at the current position first, so the position stays continuous:
+   * everything before `now` was played at the old speed, everything after at the new one.
+   */
+  setRate(rate: number, now: number): PlaybackState {
+    if (this.video === null || rate === this.rate) {
+      return this;
+    }
+    return this.next({ anchorPosition: this.positionAt(now), anchorTime: now, rate });
   }
 
   /** Stops at the end of the current video (used when the queue is empty). */
@@ -102,6 +116,7 @@ export class PlaybackState implements PlaybackTimeline {
       this.anchorTime,
       duration,
       this.rev,
+      this.rate,
     );
   }
 
@@ -114,6 +129,7 @@ export class PlaybackState implements PlaybackTimeline {
     readonly isPlaying?: boolean;
     readonly anchorPosition: number;
     readonly anchorTime: number;
+    readonly rate?: number;
   }): PlaybackState {
     return new PlaybackState(
       this.video,
@@ -122,6 +138,7 @@ export class PlaybackState implements PlaybackTimeline {
       changes.anchorTime,
       this.duration,
       this.rev + 1,
+      changes.rate ?? this.rate,
     );
   }
 }

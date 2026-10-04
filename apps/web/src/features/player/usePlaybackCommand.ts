@@ -12,6 +12,7 @@ const REQUEST_LABEL: Readonly<Record<RequestableAction['type'], string>> = {
   play: 'play',
   pause: 'pause',
   seek: 'jump',
+  set_rate: 'speed change',
   change_video: 'video change',
   queue_add: 'queue addition',
 };
@@ -51,6 +52,9 @@ export const usePlaybackCommand = (): PlaybackCommand => {
             break;
           case 'seek':
             await rpc('seek', { time: action.time });
+            break;
+          case 'set_rate':
+            await rpc('set_rate', { rate: action.rate });
             break;
           case 'change_video':
             await rpc('change_video', { url: action.url });

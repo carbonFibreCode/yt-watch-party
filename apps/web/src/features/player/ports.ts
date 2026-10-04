@@ -18,6 +18,9 @@ export interface VideoPlayer {
   setMuted(muted: boolean): Promise<void>;
   /** 0–100. Ignored by iOS, where only the hardware buttons change volume. */
   setVolume(volume: number): Promise<void>;
+  getPlaybackRate(): Promise<number>;
+  /** YouTube may ignore a speed the video does not support; check with getPlaybackRate later. */
+  setPlaybackRate(rate: number): Promise<void>;
   onStateChange(listener: (state: PlayerState) => void): () => void;
   onError(listener: (code: number) => void): () => void;
   destroy(): void;

@@ -18,6 +18,8 @@ export interface PlayerSync {
   readonly duration: { readonly videoId: VideoId; readonly seconds: number } | null;
   /** Last measured drift in ms (debugging aid and E2E hook). */
   readonly driftMs: number | null;
+  /** This video cannot play at the room's speed here (the player refused it). */
+  readonly rateUnsupported: boolean;
   /** Call from a user gesture to start blocked playback (keeps the viewer's mute choice). */
   readonly resume: () => void;
   /** The viewer's volume, 0–100 (remembered in this browser). */
@@ -51,6 +53,7 @@ export const usePlayerSync = (container: RefObject<HTMLDivElement | null>): Play
   const [duration, setDuration] = useState<PlayerSync['duration']>(null);
   const [driftMs, setDriftMs] = useState<number | null>(null);
   const [unavailable, setUnavailable] = useState(false);
+  const [rateUnsupported, setRateUnsupported] = useState(false);
 
   useEffect(() => {
     const element = container.current;
@@ -95,6 +98,7 @@ export const usePlayerSync = (container: RefObject<HTMLDivElement | null>): Play
       driftMeasured: (drift) => {
         setDriftMs(drift === null ? null : Math.round(drift * 1000));
       },
+      rateUnsupported: setRateUnsupported,
     });
     engineRef.current = engine;
     playerRef.current = player;
@@ -170,5 +174,17 @@ export const usePlayerSync = (container: RefObject<HTMLDivElement | null>): Play
     [muted],
   );
 
-  return { status, unavailable, playerState, duration, driftMs, resume, volume, muted, setVolume, setMuted };
+  return {
+    status,
+    unavailable,
+    playerState,
+    duration,
+    driftMs,
+    rateUnsupported,
+    resume,
+    volume,
+    muted,
+    setVolume,
+    setMuted,
+  };
 };

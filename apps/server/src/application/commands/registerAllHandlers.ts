@@ -19,6 +19,7 @@ import { ReportDuration } from './handlers/ReportDuration';
 import { RequestAction } from './handlers/RequestAction';
 import { ResolveRequest } from './handlers/ResolveRequest';
 import { Seek } from './handlers/Seek';
+import { SetRate } from './handlers/SetRate';
 import { Timesync } from './handlers/Timesync';
 import { TransferHost } from './handlers/TransferHost';
 import { VideoEnded } from './handlers/VideoEnded';
@@ -42,6 +43,7 @@ export const registerAllHandlers = (registry: CommandRegistry, deps: HandlerDeps
     .register(new Play(room, deps.actions))
     .register(new Pause(room, deps.actions))
     .register(new Seek(room, deps.actions))
+    .register(new SetRate(room, deps.actions))
     .register(new ChangeVideo(room, deps.actions))
     .register(new QueueAdd(room, deps.actions))
     .register(new QueueRemove(room))

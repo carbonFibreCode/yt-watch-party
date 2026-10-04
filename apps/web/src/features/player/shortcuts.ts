@@ -27,6 +27,8 @@ export type ShortcutId =
   | 'fullscreen'
   | 'exitFullscreen'
   | 'theater'
+  | 'speedUp'
+  | 'speedDown'
   | 'help';
 
 /**
@@ -47,6 +49,22 @@ export const SHORTCUTS: readonly Shortcut[] = [
     scope: 'staff',
   },
   { id: 'restart', keys: 'home', display: ['Home'], label: 'Jump to the start', scope: 'staff' },
+  {
+    id: 'speedUp',
+    keys: '>',
+    display: ['>'],
+    label: 'Faster (for everyone)',
+    scope: 'staff',
+    useKey: true,
+  },
+  {
+    id: 'speedDown',
+    keys: '<',
+    display: ['<'],
+    label: 'Slower (for everyone)',
+    scope: 'staff',
+    useKey: true,
+  },
   { id: 'mute', keys: 'm', display: ['M'], label: 'Mute or unmute', scope: 'everyone' },
   { id: 'volUp', keys: 'up', display: ['↑'], label: 'Volume up', scope: 'everyone' },
   { id: 'volDown', keys: 'down', display: ['↓'], label: 'Volume down', scope: 'everyone' },

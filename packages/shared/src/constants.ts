@@ -60,6 +60,10 @@ export const VOLUME_STEP = 5;
 export const CONTROLS_IDLE_MS = 3_000;
 /** How long the double-tap "−10 s / +10 s" badge stays on screen. */
 export const SEEK_FEEDBACK_MS = 600;
+/** Playback speeds offered in the UI and accepted by the server (YouTube's standard set). */
+export const PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
+export type PlaybackRate = (typeof PLAYBACK_RATES)[number];
+export const DEFAULT_PLAYBACK_RATE: PlaybackRate = 1;
 
 // ---------- rate limits (LLD SP-17): token bucket per user per rule ----------
 export const RATE_LIMITS = {
