@@ -41,7 +41,8 @@ const createRoom = async (browser: Browser, init?: (context: BrowserContext) => 
   await host.getByLabel('Your name').fill('Hana');
   await host.getByLabel(/First video/).fill(VIDEO);
   await host.getByRole('button', { name: 'Create room' }).click();
-  await expect(row(host, 'Hana')).toBeVisible();
+  // Joining can take a few seconds when the machine runs many real YouTube players at once.
+  await expect(row(host, 'Hana')).toBeVisible({ timeout: SYNC_TIMEOUT_MS });
   await expect(player(host)).toHaveAttribute('data-player-state', 'cued', { timeout: SYNC_TIMEOUT_MS });
   return host;
 };
@@ -51,7 +52,7 @@ const join = async (browser: Browser, url: string, name: string): Promise<Page> 
   await page.goto(url);
   await page.getByLabel('Your name').fill(name);
   await page.getByRole('button', { name: 'Join the party' }).click();
-  await expect(row(page, name)).toBeVisible();
+  await expect(row(page, name)).toBeVisible({ timeout: SYNC_TIMEOUT_MS });
   return page;
 };
 
@@ -478,7 +479,175 @@ test('no accessibility violations with the shortcuts dialog open and in fullscre
   expect(await audit()).toEqual([]);
   await host.keyboard.press('Escape');
 
+  await host.getByRole('button', { name: 'Theater mode' }).click();
+  await expect(host.locator('main')).toHaveAttribute('data-theater', 'true');
+  expect(await audit()).toEqual([]);
+
   await host.getByRole('button', { name: 'Full screen', exact: true }).click();
   await expect(frame(host)).toHaveAttribute('data-immersive', 'true');
   expect(await audit()).toEqual([]);
+});
+
+test.describe('theater mode', () => {
+  test('T and the button widen the player, move the sidebar below, and are remembered', async ({
+    browser,
+  }) => {
+    const host = await createRoom(browser);
+    await host.setViewportSize({ width: 1440, height: 900 });
+    const main = host.locator('main');
+    const sidebar = host.getByRole('complementary', { name: 'Room sidebar' });
+    const docked = await player(host).boundingBox();
+
+    await focusPage(host);
+    await host.keyboard.press('t');
+    await expect(main).toHaveAttribute('data-theater', 'true');
+    await expect(host.getByRole('button', { name: 'Default view' })).toHaveAttribute('aria-pressed', 'true');
+    const wide = await player(host).boundingBox();
+    expect(wide?.width).toBeGreaterThan((docked?.width ?? 0) * 1.15);
+    // The sidebar now sits below the player instead of beside it.
+    const side = await sidebar.boundingBox();
+    expect(side?.y).toBeGreaterThan((wide?.y ?? 0) + (wide?.height ?? 0));
+    // Player and controls still fit the screen without scrolling.
+    await expect(controlBar(host)).toBeInViewport({ ratio: 1 });
+
+    await host.reload();
+    await expect(row(host, 'Hana')).toBeVisible();
+    await expect(main).toHaveAttribute('data-theater', 'true');
+
+    await host.getByRole('button', { name: 'Default view' }).click();
+    await expect(main).toHaveAttribute('data-theater', 'false');
+    const back = await sidebar.boundingBox();
+    expect(back?.x).toBeGreaterThan((await player(host).boundingBox())?.x ?? 0);
+  });
+
+  test('on narrow screens there is no theater button and T does nothing', async ({ browser }) => {
+    const host = await createRoom(browser);
+    await host.setViewportSize({ width: 800, height: 900 });
+    await expect(host.getByRole('button', { name: 'Theater mode' })).toBeHidden();
+    await focusPage(host);
+    await host.keyboard.press('t');
+    await expect(host.locator('main')).toHaveAttribute('data-theater', 'false');
+  });
+});
+
+test.describe('double-tap gestures', () => {
+  test('host double-taps jump for everyone and add up; the middle toggles fullscreen', async ({
+    browser,
+  }) => {
+    const host = await createRoom(browser);
+    const sam = await join(browser, host.url(), 'Sam');
+    await host.getByRole('button', { name: 'Play', exact: true }).click();
+    await expect(host.getByRole('slider', { name: 'Seek' })).not.toHaveAttribute('data-disabled', '', {
+      timeout: SYNC_TIMEOUT_MS,
+    });
+    await focusPage(host);
+    await host.keyboard.press('k');
+    await host.keyboard.press('5');
+    await expect.poll(() => shownSeconds(sam), { timeout: SYNC_TIMEOUT_MS }).toBeGreaterThan(90);
+    const start = await shownSeconds(sam);
+    const layer = host.getByTestId('gesture-layer');
+    const box = await layer.boundingBox();
+    if (box === null) {
+      throw new Error('no gesture layer');
+    }
+    const y = box.height / 2;
+
+    await layer.dblclick({ position: { x: box.width * 0.9, y } });
+    await expect(host.getByTestId('seek-feedback')).toHaveText('+10 s');
+    await expect.poll(() => shownSeconds(sam)).toBe(start + 10);
+    // Two quick taps on the left add up to −20 s.
+    await layer.dblclick({ position: { x: box.width * 0.1, y } });
+    await layer.dblclick({ position: { x: box.width * 0.1, y } });
+    await expect.poll(() => shownSeconds(sam)).toBe(start - 10);
+
+    await layer.dblclick({ position: { x: box.width / 2, y } });
+    await expect(frame(host)).toHaveAttribute('data-immersive', 'true');
+    // In fullscreen the layer spans the screen: the middle third toggles back.
+    await host
+      .getByTestId('gesture-layer')
+      .dblclick({ position: { x: (host.viewportSize()?.width ?? 0) / 2, y: 200 } });
+    await expect(frame(host)).toHaveAttribute('data-immersive', 'false');
+  });
+
+  test('a participant double-tapping a side changes nothing; a single click never does', async ({
+    browser,
+  }) => {
+    const host = await createRoom(browser);
+    await host.getByRole('button', { name: 'Play', exact: true }).click();
+    const pat = await join(browser, host.url(), 'Pat');
+    await expect(player(pat)).toHaveAttribute('data-player-state', 'playing', { timeout: SYNC_TIMEOUT_MS });
+    const layer = pat.getByTestId('gesture-layer');
+    const box = await layer.boundingBox();
+    if (box === null) {
+      throw new Error('no gesture layer');
+    }
+    const before = await shownSeconds(host);
+    await layer.dblclick({ position: { x: box.width * 0.9, y: box.height / 2 } });
+    await expect(pat.getByTestId('seek-feedback')).toHaveCount(0);
+    await host.getByTestId('gesture-layer').click({ position: { x: 20, y: 20 } });
+    await host.waitForTimeout(1_000);
+    expect(await shownSeconds(host)).toBeLessThan(before + 5);
+    await expect(player(host)).toHaveAttribute('data-player-state', 'playing');
+    await expect(host.getByText(/wants to/)).toHaveCount(0);
+  });
+});
+
+test.describe('auto-hiding fullscreen controls', () => {
+  const controls = (page: Page): Locator => page.getByTestId('fullscreen-controls');
+
+  test('hide after a few idle seconds while playing, come back on movement, stay while paused', async ({
+    browser,
+  }) => {
+    const host = await createRoom(browser);
+    await host.getByRole('button', { name: 'Play', exact: true }).click();
+    await expect(player(host)).toHaveAttribute('data-player-state', 'playing', { timeout: SYNC_TIMEOUT_MS });
+    await host.getByRole('button', { name: 'Full screen', exact: true }).click();
+    await expect(controls(host)).toHaveAttribute('data-hidden', 'false');
+    await host.mouse.move(400, 200);
+
+    await expect(controls(host)).toHaveAttribute('data-hidden', 'true', { timeout: 6_000 });
+    await expect(controls(host)).toHaveCSS('opacity', '0');
+    await expect(frame(host)).toHaveClass(/cursor-none/);
+    // Hidden controls cannot be clicked or tabbed into.
+    expect(await controls(host).evaluate((el) => (el as HTMLElement).inert)).toBe(true);
+
+    await host.mouse.move(420, 220);
+    await expect(controls(host)).toHaveAttribute('data-hidden', 'false');
+    await expect(controls(host)).toHaveCSS('opacity', '1');
+
+    // A key press brings them back too.
+    await expect(controls(host)).toHaveAttribute('data-hidden', 'true', { timeout: 6_000 });
+    await host.keyboard.press('Shift');
+    await expect(controls(host)).toHaveAttribute('data-hidden', 'false');
+
+    // Paused: never hidden.
+    await host.keyboard.press('k');
+    await expect(player(host)).toHaveAttribute('data-player-state', 'paused', { timeout: SYNC_TIMEOUT_MS });
+    await host.waitForTimeout(4_000);
+    await expect(controls(host)).toHaveAttribute('data-hidden', 'false');
+  });
+
+  test('stay visible while the mouse is over them', async ({ browser }) => {
+    const host = await createRoom(browser);
+    await host.getByRole('button', { name: 'Play', exact: true }).click();
+    await host.getByRole('button', { name: 'Full screen', exact: true }).click();
+    await host.getByRole('button', { name: 'Exit full screen' }).hover();
+    await host.waitForTimeout(4_000);
+    await expect(controls(host)).toHaveAttribute('data-hidden', 'false');
+  });
+
+  test('stay visible for the host while a request is waiting', async ({ browser }) => {
+    const host = await createRoom(browser);
+    await host.getByRole('button', { name: 'Play', exact: true }).click();
+    const pat = await join(browser, host.url(), 'Pat');
+    await host.getByRole('button', { name: 'Full screen', exact: true }).click();
+    await host.mouse.move(400, 200);
+    await expect(controls(host)).toHaveAttribute('data-hidden', 'true', { timeout: 6_000 });
+
+    await pat.getByRole('button', { name: 'Ask to pause' }).click();
+    await expect(controls(host)).toHaveAttribute('data-hidden', 'false');
+    await expect(host.getByRole('button', { name: 'Pending requests (1)' })).toBeVisible();
+    await host.waitForTimeout(4_000);
+    await expect(controls(host)).toHaveAttribute('data-hidden', 'false');
+  });
 });

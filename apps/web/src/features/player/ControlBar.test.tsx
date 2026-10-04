@@ -29,6 +29,7 @@ interface Setup {
   readonly duration?: number | null;
   readonly audio?: Partial<AudioControls>;
   readonly immersiveActive?: boolean;
+  readonly theaterActive?: boolean;
   readonly requests?: readonly RequestView[];
   readonly playState?: 'playing' | 'paused';
 }
@@ -39,6 +40,7 @@ const setup = ({
   duration = 200,
   audio = {},
   immersiveActive = false,
+  theaterActive = false,
   requests = [],
   playState = 'playing',
 }: Setup = {}) => {
@@ -55,6 +57,7 @@ const setup = ({
     ...audio,
   };
   const toggle = vi.fn();
+  const toggleTheater = vi.fn();
   const onShowShortcuts = vi.fn();
   renderInRoom(
     <ControlBar
@@ -62,12 +65,13 @@ const setup = ({
       duration={duration}
       audio={fullAudio}
       immersive={{ active: immersiveActive, toggle }}
+      theater={{ active: theaterActive, toggle: toggleTheater }}
       onShowShortcuts={onShowShortcuts}
       variant={variant}
     />,
     harness,
   );
-  return { send, audio: fullAudio, toggle, onShowShortcuts, harness, user: userEvent.setup() };
+  return { send, audio: fullAudio, toggle, toggleTheater, onShowShortcuts, harness, user: userEvent.setup() };
 };
 
 const iconOf = (button: HTMLElement): string =>
@@ -178,6 +182,27 @@ describe('ControlBar: view controls', () => {
     expect(iconOf(exit)).toBe('lucide-minimize');
     await user.click(exit);
     expect(toggle).toHaveBeenCalledTimes(1);
+  });
+
+  it('theater button toggles theater and shows its state', async () => {
+    const { toggleTheater, user } = setup({ theaterActive: false });
+    const button = screen.getByRole('button', { name: 'Theater mode' });
+    expect(button).toHaveAttribute('aria-pressed', 'false');
+    // Wide screens only: there is no sidebar to make room from below `lg`.
+    expect(button.className).toContain('hidden');
+    expect(button.className).toContain('lg:inline-flex');
+    await user.click(button);
+    expect(toggleTheater).toHaveBeenCalledTimes(1);
+  });
+
+  it('labels the theater button for returning to the default view', () => {
+    setup({ theaterActive: true });
+    expect(screen.getByRole('button', { name: 'Default view' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('has no theater button in fullscreen', () => {
+    setup({ variant: 'overlay', immersiveActive: true });
+    expect(screen.queryByRole('button', { name: /Theater mode|Default view/ })).toBeNull();
   });
 
   it('shows the time and an unknown length placeholder', () => {

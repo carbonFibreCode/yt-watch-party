@@ -14,9 +14,9 @@ export interface PlayerPrefs {
 
 interface PlayerPrefsActions {
   /** Clamped and rounded; raising the volume above 0 also unmutes, like YouTube. */
-  setVolume(volume: number): void;
-  setMuted(muted: boolean): void;
-  toggleTheater(): void;
+  readonly setVolume: (volume: number) => void;
+  readonly setMuted: (muted: boolean) => void;
+  readonly toggleTheater: () => void;
 }
 
 export const DEFAULT_PLAYER_PREFS: PlayerPrefs = { volume: MAX_VOLUME, muted: false, theater: false };

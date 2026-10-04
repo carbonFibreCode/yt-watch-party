@@ -1,4 +1,15 @@
-import { Hand, Keyboard, Maximize, Minimize, Pause, Play, Volume1, Volume2, VolumeX } from 'lucide-react';
+import {
+  Hand,
+  Keyboard,
+  Maximize,
+  Minimize,
+  Pause,
+  Play,
+  RectangleHorizontal,
+  Volume1,
+  Volume2,
+  VolumeX,
+} from 'lucide-react';
 import { useState } from 'react';
 import type { PointerEvent, ReactElement } from 'react';
 import { Button } from '@/components/ui/button';
@@ -20,7 +31,8 @@ export interface AudioControls {
   readonly setVolume: (volume: number) => void;
 }
 
-export interface ImmersiveControls {
+/** A view mode the viewer can switch on and off (fullscreen, theater). */
+export interface ToggleControl {
   readonly active: boolean;
   readonly toggle: () => void;
 }
@@ -30,7 +42,8 @@ interface ControlBarProps {
   /** Video length in seconds, once known. */
   readonly duration: number | null;
   readonly audio: AudioControls;
-  readonly immersive: ImmersiveControls;
+  readonly immersive: ToggleControl;
+  readonly theater: ToggleControl;
   readonly onShowShortcuts: () => void;
   /** `overlay`: drawn over the video in fullscreen. */
   readonly variant: 'docked' | 'overlay';
@@ -49,6 +62,7 @@ export function ControlBar({
   duration,
   audio,
   immersive,
+  theater,
   onShowShortcuts,
   variant,
 }: ControlBarProps): ReactElement {
@@ -83,9 +97,7 @@ export function ControlBar({
       data-variant={variant}
       className={cn(
         'grid gap-1 px-3 pt-6 pb-2',
-        overlay
-          ? 'absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent text-white'
-          : 'bg-card rounded-xl border',
+        overlay ? 'bg-gradient-to-t from-black/80 to-transparent text-white' : 'bg-card rounded-xl border',
       )}
     >
       <div
@@ -198,6 +210,21 @@ export function ControlBar({
             <Keyboard />
           </Button>
         </ControlHint>
+        {!overlay && (
+          // Only wide screens have a sidebar to make room from.
+          <ControlHint hint={theater.active ? 'Default view (t)' : 'Theater mode (t)'}>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="hidden lg:inline-flex"
+              aria-label={theater.active ? 'Default view' : 'Theater mode'}
+              aria-pressed={theater.active}
+              onClick={theater.toggle}
+            >
+              <RectangleHorizontal />
+            </Button>
+          </ControlHint>
+        )}
         <ControlHint hint={immersive.active ? 'Exit full screen (f)' : 'Full screen (f)'}>
           <Button
             size="icon"

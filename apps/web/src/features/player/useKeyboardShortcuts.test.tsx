@@ -5,8 +5,18 @@ import { SEEK_COALESCE_MS } from '@watchparty/shared';
 import type { RequestableAction } from '@watchparty/shared';
 import { SHORTCUTS } from './shortcuts';
 import { useKeyboardShortcuts } from './useKeyboardShortcuts';
+import { useRelativeSeek } from './useRelativeSeek';
 
-type Options = Parameters<typeof useKeyboardShortcuts>[0];
+type Options = Omit<Parameters<typeof useKeyboardShortcuts>[0], 'seekTo' | 'seekBy'> & {
+  readonly position: () => number;
+  readonly rev: number | null;
+};
+
+/** The keyboard hook on top of the real seek coalescing, wired the way PlayerColumn wires them. */
+const useWired = (o: Options): void => {
+  const seek = useRelativeSeek({ send: o.send, position: o.position, rev: o.rev, duration: o.duration });
+  useKeyboardShortcuts({ ...o, ...seek });
+};
 
 const setup = (overrides: Partial<Options> = {}) => {
   const sent: RequestableAction[] = [];
@@ -29,11 +39,12 @@ const setup = (overrides: Partial<Options> = {}) => {
     toggleImmersive: vi.fn(),
     exitImmersive: vi.fn(),
     openHelp: vi.fn(),
+    toggleTheater: vi.fn(),
     ...overrides,
   };
   const hook = renderHook(
     (props: Options) => {
-      useKeyboardShortcuts(props);
+      useWired(props);
     },
     { initialProps: o },
   );
@@ -234,6 +245,46 @@ describe('useKeyboardShortcuts: local (everyone)', () => {
     expect(o.openHelp).not.toHaveBeenCalled();
     await user.keyboard('?');
     expect(o.openHelp).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('useKeyboardShortcuts: theater (T)', () => {
+  const screenIs = (wide: boolean): void => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({ matches: wide && query === '(min-width: 64rem)', media: query })),
+    );
+  };
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('toggles theater on wide screens', async () => {
+    screenIs(true);
+    const { o, user } = setup();
+    await user.keyboard('t');
+    expect(o.toggleTheater).toHaveBeenCalledTimes(1);
+  });
+
+  it('does nothing on narrow screens, where the layout is already one column', async () => {
+    screenIs(false);
+    const { o, user } = setup();
+    await user.keyboard('t');
+    expect(o.toggleTheater).not.toHaveBeenCalled();
+  });
+
+  it('does nothing in fullscreen', async () => {
+    screenIs(true);
+    const { o, user } = setup({ immersive: true });
+    await user.keyboard('t');
+    expect(o.toggleTheater).not.toHaveBeenCalled();
+  });
+
+  it('works for viewers too (it is a local layout choice)', async () => {
+    screenIs(true);
+    const { o, user } = setup({ canControl: false, hasVideo: false });
+    await user.keyboard('t');
+    expect(o.toggleTheater).toHaveBeenCalledTimes(1);
   });
 });
 

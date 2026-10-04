@@ -1,10 +1,10 @@
-import { useRef } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import type { Options } from 'react-hotkeys-hook';
-import { SEEK_COALESCE_MS, SEEK_STEP_LONG_S, SEEK_STEP_S, VOLUME_STEP } from '@watchparty/shared';
+import { SEEK_STEP_LONG_S, SEEK_STEP_S, VOLUME_STEP } from '@watchparty/shared';
 import type { RequestableAction } from '@watchparty/shared';
 import { shortcut } from './shortcuts';
 import type { ShortcutId } from './shortcuts';
+import type { RelativeSeek } from './useRelativeSeek';
 
 interface ShortcutOptions {
   /** Playback shortcuts are staff only (requests by keyboard would be too easy to spam). */
@@ -13,10 +13,10 @@ interface ShortcutOptions {
   readonly playing: boolean;
   /** Video length in seconds, once known. */
   readonly duration: number | null;
-  readonly position: () => number;
-  /** The room's playback revision; it changes once the server has applied a seek. */
-  readonly rev: number | null;
   readonly send: (action: RequestableAction) => Promise<boolean>;
+  /** Seeks that add up when repeated quickly (shared with the double-tap gestures). */
+  readonly seekTo: RelativeSeek['seekTo'];
+  readonly seekBy: RelativeSeek['seekBy'];
   readonly muted: boolean;
   readonly setMuted: (muted: boolean) => void;
   readonly volume: number;
@@ -25,7 +25,11 @@ interface ShortcutOptions {
   readonly toggleImmersive: () => void;
   readonly exitImmersive: () => void;
   readonly openHelp: () => void;
+  readonly toggleTheater: () => void;
 }
+
+/** Theater mode only changes the layout on wide screens (Tailwind `lg`), where there is a sidebar. */
+export const THEATER_MEDIA = '(min-width: 64rem)';
 
 /**
  * Focus is in a modal (a dialog traps focus), so the page behind it should not react to keys; or
@@ -53,47 +57,7 @@ const ignoreBase = (event: KeyboardEvent): boolean => event.defaultPrevented || 
  */
 export const useKeyboardShortcuts = (o: ShortcutOptions): void => {
   const staff = o.canControl && o.hasVideo;
-  /**
-   * Our seeks the room has not applied yet: each applied seek bumps the revision by one, so they
-   * are all confirmed once it reaches `fromRev + count`.
-   */
-  const pendingSeek = useRef<{
-    readonly time: number;
-    readonly fromRev: number | null;
-    readonly count: number;
-    readonly at: number;
-  } | null>(null);
-  const clamp = (time: number): number => Math.min(Math.max(0, time), o.duration ?? Number.POSITIVE_INFINITY);
-  /** Our own unconfirmed seek target, if there is one that is still fresh. */
-  const unconfirmed = (): {
-    readonly time: number;
-    readonly fromRev: number | null;
-    readonly count: number;
-  } | null => {
-    const pending = pendingSeek.current;
-    if (pending === null || Date.now() - pending.at >= SEEK_COALESCE_MS) {
-      return null;
-    }
-    const confirmed = o.rev !== null && pending.fromRev !== null && o.rev >= pending.fromRev + pending.count;
-    return confirmed ? null : pending;
-  };
-  const seekTo = (time: number): void => {
-    const target = clamp(time);
-    const pending = unconfirmed();
-    pendingSeek.current = {
-      time: target,
-      fromRev: pending === null ? o.rev : pending.fromRev,
-      count: pending === null ? 1 : pending.count + 1,
-      at: Date.now(),
-    };
-    void o.send({ type: 'seek', time: target });
-  };
-  /** Where a relative seek starts: our own unconfirmed seek if there is one, else the room. */
-  const seekBase = (): number => unconfirmed()?.time ?? o.position();
-  const seekBy = (deltaS: number): void => {
-    seekTo(seekBase() + deltaS);
-  };
-
+  const { seekTo, seekBy } = o;
   const options = (id: ShortcutId, enabled: boolean, ignore = ignoreBase): Options => {
     const { useKey } = shortcut(id);
     return {
@@ -199,4 +163,14 @@ export const useKeyboardShortcuts = (o: ShortcutOptions): void => {
     o.exitImmersive,
   ]);
   useHotkeys(shortcut('help').keys, o.openHelp, options('help', true), [o.openHelp]);
+  useHotkeys(
+    shortcut('theater').keys,
+    () => {
+      if (window.matchMedia(THEATER_MEDIA).matches) {
+        o.toggleTheater();
+      }
+    },
+    options('theater', !o.immersive),
+    [o.toggleTheater],
+  );
 };

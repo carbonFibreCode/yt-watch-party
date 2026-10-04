@@ -43,8 +43,9 @@ approve them. Every action reaches the whole room in real time over WebSockets.
   and a `CommandPipeline` ([architecture](docs/ARCHITECTURE.md)).
 - **YouTube-style player controls:** volume and mute (remembered per browser), fullscreen that
   follows your device's orientation (hosts can still approve requests from fullscreen), YouTube's
-  keyboard shortcuts (press `?` in a room for the list) and a time preview when hovering the
-  scrubber.
+  keyboard shortcuts (press `?` in a room for the list), a time preview when hovering the
+  scrubber, theater mode, double-tap to jump 10 s (or toggle fullscreen in the middle), and
+  controls that fade out in fullscreen while the video plays.
 - **Accessible:** keyboard-operable, WCAG 2.1 AA audited in both themes, with a light and a dark
   theme.
 

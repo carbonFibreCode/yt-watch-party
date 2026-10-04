@@ -1,9 +1,12 @@
 import { Film, Loader2, MonitorX, Play, RefreshCw, VolumeX, WifiOff } from 'lucide-react';
-import type { ReactElement, ReactNode, RefObject } from 'react';
+import { motion } from 'motion/react';
+import { useRef, useState } from 'react';
+import type { MouseEvent, ReactElement, ReactNode, RefObject } from 'react';
 import { Button } from '@/components/ui/button';
 import { ReactionOverlay } from '@/features/reactions/ReactionOverlay';
 import { useRoom } from '@/features/room/RoomContext';
 import { cn } from '@/lib/utils';
+import { SEEK_FEEDBACK_MS, SEEK_STEP_LONG_S } from '@watchparty/shared';
 import { isPlaybackError } from './SyncEngine';
 import type { PlaybackErrorStatus } from './SyncEngine';
 import type { PlayerSync } from './usePlayerSync';
@@ -23,7 +26,14 @@ interface PlayerSurfaceProps {
   readonly immersive?: boolean;
   /** Drawn above everything else (the fullscreen control bar). */
   readonly children?: ReactNode;
+  /** Double-tap on the left/right third: jump back/forward (staff only, see `canSeek`). */
+  readonly onSeekBy?: (deltaS: number) => void;
+  readonly canSeek?: boolean;
+  /** Double-tap in the middle third: toggle fullscreen (everyone). */
+  readonly onToggleImmersive?: () => void;
 }
+
+type Side = 'left' | 'right';
 
 /**
  * The video area: the YouTube iframe under an input-blocking layer (native controls must never
@@ -35,9 +45,34 @@ export function PlayerSurface({
   canControl,
   immersive = false,
   children,
+  onSeekBy,
+  canSeek = false,
+  onToggleImmersive,
 }: PlayerSurfaceProps): ReactElement {
   const hasVideo = useRoom((s) => s.playback !== null && s.playback.videoId !== null);
   const { status } = sync;
+  const [feedback, setFeedback] = useState<{ readonly side: Side; readonly id: number } | null>(null);
+  const feedbackId = useRef(0);
+
+  /** YouTube's gestures: double-tap a side to jump 10 s, the middle to toggle fullscreen. */
+  const onDoubleClick = (event: MouseEvent<HTMLDivElement>): void => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (rect.width <= 0) {
+      return;
+    }
+    const x = (event.clientX - rect.left) / rect.width;
+    if (x >= 1 / 3 && x <= 2 / 3) {
+      onToggleImmersive?.();
+      return;
+    }
+    if (!canSeek || !hasVideo || onSeekBy === undefined) {
+      return;
+    }
+    const side: Side = x < 1 / 3 ? 'left' : 'right';
+    onSeekBy(side === 'left' ? -SEEK_STEP_LONG_S : SEEK_STEP_LONG_S);
+    feedbackId.current += 1;
+    setFeedback({ side, id: feedbackId.current });
+  };
 
   return (
     <div
@@ -51,8 +86,33 @@ export function PlayerSurface({
       data-drift-ms={sync.driftMs ?? ''}
     >
       <div ref={containerRef} className="absolute inset-0" />
-      {/* Swallows clicks so the embedded player's own UI can never change playback. */}
-      <div className="absolute inset-0" aria-hidden />
+      {/* Swallows clicks so the embedded player's own UI can never change playback. Gestures are
+          a convenience on top; buttons and keys remain the accessible way to do the same. */}
+      <div
+        className="absolute inset-0 touch-manipulation"
+        aria-hidden
+        data-testid="gesture-layer"
+        onDoubleClick={onDoubleClick}
+      />
+      {feedback !== null && (
+        <motion.div
+          key={feedback.id}
+          data-testid="seek-feedback"
+          aria-hidden
+          initial={{ opacity: 1, scale: 1 }}
+          animate={{ opacity: 0, scale: 1.1 }}
+          transition={{ duration: SEEK_FEEDBACK_MS / 1000 }}
+          onAnimationComplete={() => {
+            setFeedback((current) => (current?.id === feedback.id ? null : current));
+          }}
+          className={cn(
+            'pointer-events-none absolute top-1/2 -translate-y-1/2 rounded-full bg-black/60 px-4 py-2 text-sm font-medium text-white',
+            feedback.side === 'left' ? 'left-[12%]' : 'right-[12%]',
+          )}
+        >
+          {feedback.side === 'left' ? `−${String(SEEK_STEP_LONG_S)} s` : `+${String(SEEK_STEP_LONG_S)} s`}
+        </motion.div>
+      )}
       <ReactionOverlay />
 
       {!hasVideo && (

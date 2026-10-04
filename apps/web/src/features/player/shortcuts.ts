@@ -26,6 +26,7 @@ export type ShortcutId =
   | 'volDown'
   | 'fullscreen'
   | 'exitFullscreen'
+  | 'theater'
   | 'help';
 
 /**
@@ -51,6 +52,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { id: 'volDown', keys: 'down', display: ['↓'], label: 'Volume down', scope: 'everyone' },
   { id: 'fullscreen', keys: 'f', display: ['F'], label: 'Full screen', scope: 'everyone' },
   { id: 'exitFullscreen', keys: 'escape', display: ['Esc'], label: 'Exit full screen', scope: 'everyone' },
+  { id: 'theater', keys: 't', display: ['T'], label: 'Theater mode (wide screens)', scope: 'everyone' },
   {
     id: 'help',
     keys: '?',
