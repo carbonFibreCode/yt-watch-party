@@ -1,50 +1,202 @@
-import { useEffect } from 'react';
-import { SEEK_STEP_S } from '@watchparty/shared';
+import { useRef } from 'react';
+import { useHotkeys } from 'react-hotkeys-hook';
+import type { Options } from 'react-hotkeys-hook';
+import { SEEK_COALESCE_MS, SEEK_STEP_LONG_S, SEEK_STEP_S, VOLUME_STEP } from '@watchparty/shared';
 import type { RequestableAction } from '@watchparty/shared';
+import { shortcut } from './shortcuts';
+import type { ShortcutId } from './shortcuts';
 
 interface ShortcutOptions {
-  readonly enabled: boolean;
+  /** Playback shortcuts are staff only (requests by keyboard would be too easy to spam). */
+  readonly canControl: boolean;
+  readonly hasVideo: boolean;
   readonly playing: boolean;
+  /** Video length in seconds, once known. */
+  readonly duration: number | null;
   readonly position: () => number;
+  /** The room's playback revision; it changes once the server has applied a seek. */
+  readonly rev: number | null;
   readonly send: (action: RequestableAction) => Promise<boolean>;
+  readonly muted: boolean;
+  readonly setMuted: (muted: boolean) => void;
+  readonly volume: number;
+  readonly setVolume: (volume: number) => void;
+  readonly immersive: boolean;
+  readonly toggleImmersive: () => void;
+  readonly exitImmersive: () => void;
+  readonly openHelp: () => void;
 }
 
-const isTyping = (target: EventTarget | null): boolean =>
-  target instanceof HTMLElement &&
-  (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+/**
+ * Focus is in a modal (a dialog traps focus), so the page behind it should not react to keys; or
+ * in a rich-text editor, which react-hotkeys-hook does not treat as a form field.
+ */
+const NOT_FOR_PAGE =
+  '[role="dialog"], [role="alertdialog"], [contenteditable]:not([contenteditable="false"])';
+/** Space/Enter activate these natively; taking the key would break them (e.g. a toast's Approve). */
+const ACTIVATES_ON_SPACE =
+  'button, a[href], summary, [role="button"], [role="checkbox"], [role="switch"], [role="tab"], [role="menuitem"], [role="menuitemradio"], [role="radio"], [role="option"]';
+/** These widgets use the arrow/Home keys themselves (sliders, tabs, menus, lists). */
+const USES_ARROWS =
+  '[role="slider"], [role="tablist"], [role="menu"], [role="menubar"], [role="listbox"], [role="radiogroup"]';
 
-/** Space/K toggles play, ←/→ jump 5 s. Staff only (requests by keyboard would be too easy to spam). */
-export const useKeyboardShortcuts = ({ enabled, playing, position, send }: ShortcutOptions): void => {
-  useEffect(() => {
-    if (!enabled) {
-      return;
+const targetIn = (event: KeyboardEvent, selector: string): boolean =>
+  event.target instanceof Element && event.target.closest(selector) !== null;
+
+/** Shared by every shortcut: never steal keys from dialogs, or from something that handled them. */
+const ignoreBase = (event: KeyboardEvent): boolean => event.defaultPrevented || targetIn(event, NOT_FOR_PAGE);
+
+/**
+ * YouTube's player shortcuts (plan §15.4 Step 1.9), keyed from the shared SHORTCUTS table. Typing
+ * in a field never triggers them (react-hotkeys-hook ignores form fields by default), and keys
+ * that the focused control needs for itself (Space on a button, arrows on a slider) are left to it.
+ */
+export const useKeyboardShortcuts = (o: ShortcutOptions): void => {
+  const staff = o.canControl && o.hasVideo;
+  /**
+   * Our seeks the room has not applied yet: each applied seek bumps the revision by one, so they
+   * are all confirmed once it reaches `fromRev + count`.
+   */
+  const pendingSeek = useRef<{
+    readonly time: number;
+    readonly fromRev: number | null;
+    readonly count: number;
+    readonly at: number;
+  } | null>(null);
+  const clamp = (time: number): number => Math.min(Math.max(0, time), o.duration ?? Number.POSITIVE_INFINITY);
+  /** Our own unconfirmed seek target, if there is one that is still fresh. */
+  const unconfirmed = (): {
+    readonly time: number;
+    readonly fromRev: number | null;
+    readonly count: number;
+  } | null => {
+    const pending = pendingSeek.current;
+    if (pending === null || Date.now() - pending.at >= SEEK_COALESCE_MS) {
+      return null;
     }
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (
-        event.defaultPrevented ||
-        event.metaKey ||
-        event.ctrlKey ||
-        event.altKey ||
-        isTyping(event.target)
-      ) {
-        return;
-      }
-      const action: RequestableAction | null =
-        event.key === ' ' || event.key === 'k'
-          ? { type: playing ? 'pause' : 'play' }
-          : event.key === 'ArrowRight'
-            ? { type: 'seek', time: position() + SEEK_STEP_S }
-            : event.key === 'ArrowLeft'
-              ? { type: 'seek', time: Math.max(0, position() - SEEK_STEP_S) }
-              : null;
-      if (action !== null) {
-        event.preventDefault();
-        void send(action);
-      }
+    const confirmed = o.rev !== null && pending.fromRev !== null && o.rev >= pending.fromRev + pending.count;
+    return confirmed ? null : pending;
+  };
+  const seekTo = (time: number): void => {
+    const target = clamp(time);
+    const pending = unconfirmed();
+    pendingSeek.current = {
+      time: target,
+      fromRev: pending === null ? o.rev : pending.fromRev,
+      count: pending === null ? 1 : pending.count + 1,
+      at: Date.now(),
     };
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
+    void o.send({ type: 'seek', time: target });
+  };
+  /** Where a relative seek starts: our own unconfirmed seek if there is one, else the room. */
+  const seekBase = (): number => unconfirmed()?.time ?? o.position();
+  const seekBy = (deltaS: number): void => {
+    seekTo(seekBase() + deltaS);
+  };
+
+  const options = (id: ShortcutId, enabled: boolean, ignore = ignoreBase): Options => {
+    const { useKey } = shortcut(id);
+    return {
+      enabled,
+      preventDefault: true,
+      ignoreEventWhen: ignore,
+      ...(useKey === undefined ? {} : { useKey }),
     };
-  }, [enabled, playing, position, send]);
+  };
+  const ignoreSpaceTargets = (event: KeyboardEvent): boolean =>
+    ignoreBase(event) || (event.key === ' ' && targetIn(event, ACTIVATES_ON_SPACE));
+  const ignoreArrowTargets = (event: KeyboardEvent): boolean =>
+    ignoreBase(event) || targetIn(event, USES_ARROWS);
+
+  useHotkeys(
+    shortcut('togglePlay').keys,
+    () => {
+      void o.send({ type: o.playing ? 'pause' : 'play' });
+    },
+    options('togglePlay', staff, ignoreSpaceTargets),
+    [o.send, o.playing],
+  );
+  useHotkeys(
+    shortcut('back10').keys,
+    () => {
+      seekBy(-SEEK_STEP_LONG_S);
+    },
+    options('back10', staff),
+    [seekBy],
+  );
+  useHotkeys(
+    shortcut('fwd10').keys,
+    () => {
+      seekBy(SEEK_STEP_LONG_S);
+    },
+    options('fwd10', staff),
+    [seekBy],
+  );
+  useHotkeys(
+    shortcut('back5').keys,
+    () => {
+      seekBy(-SEEK_STEP_S);
+    },
+    options('back5', staff, ignoreArrowTargets),
+    [seekBy],
+  );
+  useHotkeys(
+    shortcut('fwd5').keys,
+    () => {
+      seekBy(SEEK_STEP_S);
+    },
+    options('fwd5', staff, ignoreArrowTargets),
+    [seekBy],
+  );
+  useHotkeys(
+    shortcut('jumpPercent').keys,
+    (event) => {
+      const digit = Number(event.key);
+      if (o.duration !== null && Number.isInteger(digit)) {
+        seekTo((o.duration * digit) / 10);
+      }
+    },
+    options('jumpPercent', staff && o.duration !== null),
+    [seekTo, o.duration],
+  );
+  useHotkeys(
+    shortcut('restart').keys,
+    () => {
+      seekTo(0);
+    },
+    options('restart', staff, ignoreArrowTargets),
+    [seekTo],
+  );
+
+  useHotkeys(
+    shortcut('mute').keys,
+    () => {
+      o.setMuted(!o.muted);
+    },
+    options('mute', true),
+    [o.setMuted, o.muted],
+  );
+  useHotkeys(
+    shortcut('volUp').keys,
+    () => {
+      o.setVolume(o.volume + VOLUME_STEP);
+    },
+    options('volUp', true, ignoreArrowTargets),
+    [o.setVolume, o.volume],
+  );
+  useHotkeys(
+    shortcut('volDown').keys,
+    () => {
+      o.setVolume(o.volume - VOLUME_STEP);
+    },
+    options('volDown', true, ignoreArrowTargets),
+    [o.setVolume, o.volume],
+  );
+  useHotkeys(shortcut('fullscreen').keys, o.toggleImmersive, options('fullscreen', true), [
+    o.toggleImmersive,
+  ]);
+  useHotkeys(shortcut('exitFullscreen').keys, o.exitImmersive, options('exitFullscreen', o.immersive), [
+    o.exitImmersive,
+  ]);
+  useHotkeys(shortcut('help').keys, o.openHelp, options('help', true), [o.openHelp]);
 };

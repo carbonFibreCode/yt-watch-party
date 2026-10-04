@@ -16,6 +16,8 @@ export interface VideoPlayer {
   getState(): Promise<PlayerState>;
   isMuted(): Promise<boolean>;
   setMuted(muted: boolean): Promise<void>;
+  /** 0–100. Ignored by iOS, where only the hardware buttons change volume. */
+  setVolume(volume: number): Promise<void>;
   onStateChange(listener: (state: PlayerState) => void): () => void;
   onError(listener: (code: number) => void): () => void;
   destroy(): void;

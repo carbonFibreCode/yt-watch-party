@@ -114,6 +114,10 @@ export class YouTubePlayerAdapter implements VideoPlayer {
     return this.call(() => (muted ? this.player.mute() : this.player.unMute()));
   }
 
+  setVolume(volume: number): Promise<void> {
+    return this.call(() => this.player.setVolume(volume));
+  }
+
   onStateChange(listener: (state: PlayerState) => void): () => void {
     this.stateListeners.add(listener);
     return () => this.stateListeners.delete(listener);

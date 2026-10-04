@@ -47,6 +47,19 @@ export const PLAYER_READY_TIMEOUT_MS = 15_000;
 export const UI_TIME_REFRESH_MS = 250;
 /** Arrow-key seek step. */
 export const SEEK_STEP_S = 5;
+/** J/L and double-tap seek step. */
+export const SEEK_STEP_LONG_S = 10;
+/**
+ * Rapid seek keys add up (J J J = −30 s): until the room confirms a seek (or this long passes),
+ * the next relative seek starts from that seek's target instead of the not-yet-updated position.
+ */
+export const SEEK_COALESCE_MS = 2_000;
+/** ↑/↓ volume step, in YouTube's 0–100 volume units. */
+export const VOLUME_STEP = 5;
+/** Fullscreen controls hide after this long without pointer/keyboard activity while playing. */
+export const CONTROLS_IDLE_MS = 3_000;
+/** How long the double-tap "−10 s / +10 s" badge stays on screen. */
+export const SEEK_FEEDBACK_MS = 600;
 
 // ---------- rate limits (LLD SP-17): token bucket per user per rule ----------
 export const RATE_LIMITS = {

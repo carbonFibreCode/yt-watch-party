@@ -21,6 +21,7 @@ export class FakePlayer implements VideoPlayer {
   videoId: VideoId | null = null;
   state: PlayerState = 'unstarted';
   muted = false;
+  volume = 100;
   /** Browser refuses unmuted programmatic play. */
   blockUnmutedAutoplay = false;
   /** Browser refuses even muted play. */
@@ -126,6 +127,12 @@ export class FakePlayer implements VideoPlayer {
   setMuted(muted: boolean): Promise<void> {
     this.calls.push(muted ? 'mute' : 'unmute');
     this.muted = muted;
+    return Promise.resolve();
+  }
+
+  setVolume(volume: number): Promise<void> {
+    this.calls.push(`volume:${String(volume)}`);
+    this.volume = volume;
     return Promise.resolve();
   }
 

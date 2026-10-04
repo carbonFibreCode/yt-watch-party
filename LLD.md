@@ -975,7 +975,7 @@ interface SyncEngineOutput {                    // the engine never talks to soc
     - `usePlaybackCommand()` returns `{ mode: 'direct' | 'request' | 'none', send(action) }` from `useCan`.
     - Staff act directly, participants send `request_action` (with a "sent to the host" toast), and viewers get disabled controls with an explanatory tooltip.
     - The scrubber emits `seek` only on `onValueCommit`.
-    - Keyboard (Space/K, ←/→ ±`SEEK_STEP_S`) is enabled for direct mode only, so requests can't be spammed from the keyboard.
+    - Keyboard shortcuts follow YouTube's key map (§15 below). Playback keys are enabled for direct mode only, so requests can't be spammed from the keyboard.
 11. **Adapter details.**
     - The IFrame API *replaces* the element it's given, so `usePlayerSync` creates that host element imperatively inside a React-owned container.
     - The `@types/youtube-player` typings omit `off`, so the adapter subscribes once per event and fans out to its own listener sets.
@@ -991,6 +991,13 @@ interface SyncEngineOutput {                    // the engine never talks to soc
     - **Engine:** the queue catches a failed pass and forgets the loaded video, so the next tick reloads it.
     - **Hook:** a watchdog marks the player `unavailable` after `PLAYER_READY_TIMEOUT_MS`. On the browser's `online` event it **reloads the page** if the player never became ready; the session cookie and grace period keep the user in the room with the same role. The surface shows "Couldn't load the YouTube player" with a Reload button.
     - **Verified:** by `e2e/chaos.spec.ts`.
+    - **Unreadable time:** before YouTube has the video loaded, `getCurrentTime()` can return a non-number. The engine treats that pass as not measurable (`driftMeasured(null)`, no corrective seek) but still enforces play/pause.
+15. **Viewer-local controls** (player quality-of-life).
+    - **Local, never synced:** volume, mute, fullscreen and the keyboard-shortcut help are per viewer and work for every role. Volume and mute live in a zustand `persist` store (`playerPrefs.ts`, key `watchparty.player`), validated on load and safe when storage is full or blocked.
+    - **Mute goes through the engine:** `SyncEngine.setMuted(muted)` is serialized with reconciliation and doubles as the user-gesture retry, so a viewer's mute choice and the autoplay muted fallback never race. Muting during the fallback turns it into the viewer's choice; "click to join" keeps a muted viewer muted.
+    - **Fullscreen** (`useImmersive`, via `screenfull`) puts the *page* into fullscreen and stretches the player over it with CSS. Dialogs, menus and toasts portal to `<body>`, so the host's approval toasts stay visible and clickable; the fullscreen control bar also offers a "Pending requests" dialog. Orientation is never locked: the layout is pure CSS (flex, `dvh`, safe-area padding), so it follows the device. Where the Fullscreen API is missing (iPhone Safari), the player fills the viewport instead.
+    - **Shortcuts** (`react-hotkeys-hook`, one table in `shortcuts.ts` shared with the help dialog): Space/K, J/L ±10 s, ←/→ ±5 s, 0–9, Home (staff); M, ↑/↓, F, Esc, ? (everyone). Keys are left to the focused control when it needs them (Space on a button, arrows on a slider/tabs/menu), and to dialogs and text fields. Rapid relative seeks add up: until the room has applied each of this client's seeks (one revision each) or `SEEK_COALESCE_MS` passes, the next one starts from the last target.
+    - **The input-blocking layer is unchanged:** none of these controls can produce a playback intent except through `PlaybackCommand`.
 
 ## SP-14 Client State & Socket Binding
 

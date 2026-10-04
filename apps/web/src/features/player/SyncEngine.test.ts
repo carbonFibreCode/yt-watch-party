@@ -215,6 +215,130 @@ describe('SyncEngine', () => {
     expect(engine.status).toBe('in_sync');
   });
 
+  describe('viewer mute (setMuted)', () => {
+    /** Unmuted autoplay blocked → engine falls back to muted playback. */
+    const forcedMuted = async () => {
+      const t = setup();
+      t.player.blockUnmutedAutoplay = true;
+      await t.engine.apply(t.state());
+      await t.settle();
+      t.clock.advance(autoplayDetectMs);
+      await t.engine.tick();
+      expect(t.engine.status).toBe('muted');
+      return t;
+    };
+
+    it('muting during the autoplay fallback makes it the viewer’s choice (no "tap to unmute")', async () => {
+      const { engine, player, settle } = await forcedMuted();
+      await engine.setMuted(true);
+      expect(player.muted).toBe(true);
+      expect(player.state).toBe('playing');
+      expect(engine.status).toBe('in_sync');
+      await settle();
+      await settle();
+      expect(engine.status).toBe('in_sync');
+    });
+
+    it('unmuting during the autoplay fallback unmutes and keeps playing', async () => {
+      const { engine, player } = await forcedMuted();
+      player.blockUnmutedAutoplay = false;
+      await engine.setMuted(false);
+      expect(player.muted).toBe(false);
+      expect(player.state).toBe('playing');
+      expect(engine.status).toBe('in_sync');
+    });
+
+    it('a viewer muted from the start plays muted without any fallback or banner', async () => {
+      const { engine, player, state, settle } = setup();
+      player.blockUnmutedAutoplay = true;
+      await engine.setMuted(true);
+      await engine.apply(state());
+      await settle();
+      expect(player.state).toBe('playing');
+      expect(engine.status).toBe('in_sync');
+      expect(player.calls).not.toContain('unmute');
+    });
+
+    it('a muted viewer whose browser blocks even muted playback gets the click gate, never unmuted', async () => {
+      const { engine, player, state, settle, clock } = setup();
+      player.blockAllAutoplay = true;
+      await engine.setMuted(true);
+      await engine.apply(state());
+      await settle();
+      clock.advance(autoplayDetectMs);
+      await engine.tick();
+      expect(engine.status).toBe('blocked');
+      expect(player.calls).not.toContain('unmute');
+    });
+
+    it('clicking through the gate while muted starts playback and keeps the viewer muted', async () => {
+      const { engine, player, state, settle, clock } = setup();
+      player.blockAllAutoplay = true;
+      await engine.setMuted(true);
+      await engine.apply(state());
+      await settle();
+      clock.advance(autoplayDetectMs);
+      await engine.tick();
+      expect(engine.status).toBe('blocked');
+
+      player.blockAllAutoplay = false;
+      await engine.setMuted(true);
+      expect(player.state).toBe('playing');
+      expect(player.muted).toBe(true);
+      expect(engine.status).toBe('in_sync');
+      expect(player.calls).not.toContain('unmute');
+    });
+
+    it('does not start playback when the room is paused', async () => {
+      const { engine, player, state, settle } = setup();
+      await engine.apply(state({ playState: 'paused' }));
+      await settle();
+      await engine.setMuted(false);
+      await engine.setMuted(true);
+      expect(player.calls).not.toContain('play');
+      expect(engine.status).toBe('in_sync');
+    });
+
+    it('works with no video loaded (stays idle, only mutes)', async () => {
+      const { engine, player } = setup();
+      await engine.setMuted(true);
+      expect(player.calls).toEqual(['mute']);
+      expect(engine.status).toBe('idle');
+    });
+
+    it('never interleaves with a reconcile in progress', async () => {
+      const { engine, player, state } = setup();
+      const applied = engine.apply(state());
+      const muted = engine.setMuted(true);
+      await Promise.all([applied, muted]);
+      expect(player.calls[0]).toBe(`load:${VIDEO}@0.0:true`);
+      expect(player.calls[1]).toBe('mute');
+    });
+
+    it('survives a failing mute and keeps syncing', async () => {
+      const { engine, player, state, settle } = setup();
+      await engine.apply(state());
+      await settle();
+      const original = player.setMuted.bind(player);
+      player.setMuted = () => Promise.reject(new Error('player gone'));
+      await expect(engine.setMuted(true)).resolves.toBeUndefined();
+      player.setMuted = original;
+      await settle();
+      expect(player.state).toBe('playing');
+    });
+
+    it('a repeated toggle ends in the last requested state', async () => {
+      const { engine, player, state, settle } = setup();
+      await engine.apply(state());
+      await settle();
+      void engine.setMuted(true);
+      void engine.setMuted(false);
+      await engine.setMuted(true);
+      expect(player.muted).toBe(true);
+      expect(player.calls.filter((c) => c === 'mute' || c === 'unmute')).toEqual(['mute', 'unmute', 'mute']);
+    });
+  });
+
   it('reports the duration once per video when playback starts', async () => {
     const { engine, player, state, events } = setup();
     await engine.apply(state());
@@ -313,6 +437,32 @@ describe('SyncEngine', () => {
     await engine.tick();
     expect(player.calls.filter((c) => c.startsWith('load'))).toHaveLength(2);
     expect(player.videoId).toBe(VIDEO);
+  });
+
+  it.each([Number.NaN, undefined, Number.POSITIVE_INFINITY] as unknown[])(
+    'treats an unreadable player time (%s) as not measurable, without seeking',
+    async (reading) => {
+      const { engine, player, state, settle, events } = setup();
+      await engine.apply(state());
+      await settle();
+      const calls = player.calls.length;
+      player.getCurrentTime = () => Promise.resolve(reading as number);
+      await settle();
+      expect(events.drifts.at(-1)).toBeNull();
+      expect(events.drifts.some((d) => d !== null && Number.isNaN(d))).toBe(false);
+      expect(player.calls.slice(calls).some((c) => c.startsWith('seek'))).toBe(false);
+      expect(player.state).toBe('playing');
+    },
+  );
+
+  it('still enforces pause while the time is unreadable', async () => {
+    const { engine, player, state, settle } = setup();
+    await engine.apply(state());
+    await settle();
+    player.getCurrentTime = () => Promise.resolve(Number.NaN);
+    await engine.apply(state({ playState: 'paused', rev: 2 }));
+    await settle();
+    expect(player.state).toBe('paused');
   });
 
   it('stops listening to the player when disposed', () => {

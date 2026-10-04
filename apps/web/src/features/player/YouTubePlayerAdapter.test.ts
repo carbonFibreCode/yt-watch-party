@@ -21,6 +21,7 @@ const fakeFactory = () => {
     isMuted: vi.fn(() => Promise.resolve(false)),
     mute: vi.fn(() => Promise.resolve()),
     unMute: vi.fn(() => Promise.resolve()),
+    setVolume: vi.fn(() => Promise.resolve()),
     destroy: vi.fn(() => Promise.resolve()),
   };
   const factory = vi.fn(() => player) as unknown as Factory;
@@ -79,6 +80,24 @@ describe('YouTubePlayerAdapter', () => {
     await adapter.load('aaaaaaaaaaa', 5, false);
     expect(player.loadVideoById).toHaveBeenCalledWith({ videoId: 'dQw4w9WgXcQ', startSeconds: 30 });
     expect(player.cueVideoById).toHaveBeenCalledWith({ videoId: 'aaaaaaaaaaa', startSeconds: 5 });
+  });
+
+  it('forwards volume to the IFrame API', async () => {
+    const { factory, player } = fakeFactory();
+    const adapter = new YouTubePlayerAdapter(document.createElement('div'), factory);
+    await adapter.setVolume(40);
+    await adapter.setVolume(0);
+    expect(player.setVolume.mock.calls).toEqual([[40], [0]]);
+  });
+
+  it('fails a volume change that never settles instead of hanging', async () => {
+    vi.useFakeTimers();
+    const { factory, player } = fakeFactory();
+    player.setVolume.mockReturnValue(new Promise(() => undefined));
+    const adapter = new YouTubePlayerAdapter(document.createElement('div'), factory);
+    const change = adapter.setVolume(50);
+    vi.advanceTimersByTime(PLAYER_CALL_TIMEOUT_MS);
+    await expect(change).rejects.toBeInstanceOf(PlayerUnavailableError);
   });
 
   it('maps controls, queries and mute to the IFrame API', async () => {

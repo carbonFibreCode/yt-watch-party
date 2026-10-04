@@ -126,16 +126,26 @@ export class SyncEngine {
     return this.enqueue(() => this.reconcile());
   }
 
-  /** A user gesture happened (e.g. "tap to unmute"): unmute and retry playback. */
-  userGesture(): Promise<void> {
+  /**
+   * The viewer chose to mute or unmute. Always called from a user gesture, so it also retries
+   * playback that autoplay blocked: a gesture lets the browser start it, muted or not. Muting
+   * while the engine had force-muted (autoplay fallback) turns that fallback into the viewer's
+   * own choice, so it stops being reported as `muted`.
+   */
+  setMuted(muted: boolean): Promise<void> {
     return this.enqueue(async () => {
-      await this.player.setMuted(false);
+      await this.player.setMuted(muted);
       this.playRequestedAt = null;
       if (this.currentStatus === 'muted' || this.currentStatus === 'blocked') {
         this.setStatus('loading');
       }
       await this.reconcile();
     });
+  }
+
+  /** A user gesture with no mute preference involved (e.g. "tap to unmute"): unmute and retry. */
+  userGesture(): Promise<void> {
+    return this.setMuted(false);
   }
 
   dispose(): void {
@@ -193,6 +203,14 @@ export class SyncEngine {
     // Drift correction waits out the cooldown; play/pause below is always enforced.
     if (now - this.lastSeekAt >= this.config.postSeekCooldownMs) {
       const actual = await this.player.getCurrentTime();
+      // Before YouTube has the video loaded it can report no time at all: not measurable yet.
+      if (!Number.isFinite(actual)) {
+        this.output.driftMeasured(null);
+        if (shouldPlay) {
+          await this.ensurePlaying(state, now);
+        }
+        return;
+      }
       const drift = actual - expected;
       this.output.driftMeasured(drift);
       if (this.learnLead && state === 'playing') {

@@ -41,6 +41,10 @@ approve them. Every action reaches the whole room in real time over WebSockets.
 - **Transfer host**, plus automatic host succession if the host leaves.
 - **OOP server design:** a `Room` aggregate, `Participant`, one `CommandHandler` class per event
   and a `CommandPipeline` ([architecture](docs/ARCHITECTURE.md)).
+- **YouTube-style player controls:** volume and mute (remembered per browser), fullscreen that
+  follows your device's orientation (hosts can still approve requests from fullscreen), YouTube's
+  keyboard shortcuts (press `?` in a room for the list) and a time preview when hovering the
+  scrubber.
 - **Accessible:** keyboard-operable, WCAG 2.1 AA audited in both themes, with a light and a dark
   theme.
 
@@ -155,8 +159,14 @@ and a fan-out p99 of 6 ms. Method, numbers and limits are in [`docs/loadtest.md`
     locally, and scaling it in production needs a paid plan, not code changes.
 - **Server-authoritative controls:** a click takes effect when the room confirms it (one round
   trip, typically tens of ms). There's no optimistic UI to roll back.
-- **YouTube's own controls are hidden:** use the app's control bar (Space/K to play or pause,
-  ←/→ to skip 5 s). This is what makes sync echo-free.
+- **YouTube's own controls are hidden:** use the app's control bar or YouTube's keyboard
+  shortcuts (`?` shows them). This is what makes sync echo-free. Playback shortcuts are for the
+  host and moderators.
+- **Fullscreen on iPhone:** iPhone Safari only allows true fullscreen for its own video player,
+  so there the player fills the screen but Safari's address bar stays visible. Android, iPad and
+  desktop browsers get true fullscreen.
+- **Volume on iPhone:** iOS ignores volume set by a web page, so phones use their hardware
+  buttons (mute still works).
 - **Autoplay rules:** if a browser blocks sound, video starts muted with a "Tap to unmute"
   button; some mobile browsers need one tap to start.
 - **Embedding:** videos whose owners disable embedding can't play. They're rejected up front

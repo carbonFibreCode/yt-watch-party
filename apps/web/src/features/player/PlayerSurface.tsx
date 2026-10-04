@@ -1,8 +1,9 @@
 import { Film, Loader2, MonitorX, Play, RefreshCw, VolumeX, WifiOff } from 'lucide-react';
-import type { ReactElement, RefObject } from 'react';
+import type { ReactElement, ReactNode, RefObject } from 'react';
 import { Button } from '@/components/ui/button';
 import { ReactionOverlay } from '@/features/reactions/ReactionOverlay';
 import { useRoom } from '@/features/room/RoomContext';
+import { cn } from '@/lib/utils';
 import { isPlaybackError } from './SyncEngine';
 import type { PlaybackErrorStatus } from './SyncEngine';
 import type { PlayerSync } from './usePlayerSync';
@@ -18,19 +19,32 @@ interface PlayerSurfaceProps {
   readonly containerRef: RefObject<HTMLDivElement | null>;
   readonly sync: PlayerSync;
   readonly canControl: boolean;
+  /** Fullscreen: fill the available space instead of keeping 16:9 (YouTube letterboxes itself). */
+  readonly immersive?: boolean;
+  /** Drawn above everything else (the fullscreen control bar). */
+  readonly children?: ReactNode;
 }
 
 /**
  * The video area: the YouTube iframe under an input-blocking layer (native controls must never
  * produce intents, LLD SP-13), plus every playback state the viewer needs to know about.
  */
-export function PlayerSurface({ containerRef, sync, canControl }: PlayerSurfaceProps): ReactElement {
+export function PlayerSurface({
+  containerRef,
+  sync,
+  canControl,
+  immersive = false,
+  children,
+}: PlayerSurfaceProps): ReactElement {
   const hasVideo = useRoom((s) => s.playback !== null && s.playback.videoId !== null);
   const { status } = sync;
 
   return (
     <div
-      className="relative aspect-video w-full overflow-hidden rounded-xl bg-black"
+      className={cn(
+        'relative w-full overflow-hidden bg-black',
+        immersive ? 'min-h-0 flex-1' : 'aspect-video rounded-xl',
+      )}
       data-testid="player"
       data-sync-status={sync.unavailable ? 'unavailable' : status}
       data-player-state={sync.playerState}
@@ -69,7 +83,8 @@ export function PlayerSurface({ containerRef, sync, canControl }: PlayerSurfaceP
         <Button
           size="sm"
           variant="secondary"
-          className="absolute bottom-3 left-3 shadow-lg"
+          // In fullscreen the control bar covers the bottom edge, so it moves to the top.
+          className={cn('absolute left-3 shadow-lg', immersive ? 'top-12' : 'bottom-3')}
           onClick={sync.resume}
         >
           <VolumeX /> Tap to unmute
@@ -134,6 +149,7 @@ export function PlayerSurface({ containerRef, sync, canControl }: PlayerSurfaceP
           </div>
         </div>
       )}
+      {children}
     </div>
   );
 }

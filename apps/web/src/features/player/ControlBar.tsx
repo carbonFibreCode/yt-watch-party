@@ -1,52 +1,112 @@
-import { Hand, Pause, Play } from 'lucide-react';
+import { Hand, Keyboard, Maximize, Minimize, Pause, Play, Volume1, Volume2, VolumeX } from 'lucide-react';
 import { useState } from 'react';
-import type { ReactElement } from 'react';
+import type { PointerEvent, ReactElement } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { ReactionMarkers } from '@/features/reactions/ReactionMarkers';
+import { PendingRequestsButton } from '@/features/requests/PendingRequestsButton';
 import { useRoom } from '@/features/room/RoomContext';
 import { formatDuration } from '@/lib/format';
+import { cn } from '@/lib/utils';
 import { ControlHint } from './ControlHint';
 import { hintFor } from './controlHints';
 import type { PlaybackCommand } from './usePlaybackCommand';
 import { usePlaybackPosition } from './usePlaybackPosition';
 
+export interface AudioControls {
+  readonly muted: boolean;
+  readonly volume: number;
+  readonly setMuted: (muted: boolean) => void;
+  readonly setVolume: (volume: number) => void;
+}
+
+export interface ImmersiveControls {
+  readonly active: boolean;
+  readonly toggle: () => void;
+}
+
 interface ControlBarProps {
   readonly command: PlaybackCommand;
   /** Video length in seconds, once known. */
   readonly duration: number | null;
+  readonly audio: AudioControls;
+  readonly immersive: ImmersiveControls;
+  readonly onShowShortcuts: () => void;
+  /** `overlay`: drawn over the video in fullscreen. */
+  readonly variant: 'docked' | 'overlay';
 }
 
-/** Play/pause, time and scrubber. Every control routes through the role-aware PlaybackCommand. */
-export function ControlBar({ command, duration }: ControlBarProps): ReactElement {
+const volumeIcon = (muted: boolean, volume: number): ReactElement =>
+  muted || volume === 0 ? <VolumeX /> : volume < 50 ? <Volume1 /> : <Volume2 />;
+
+/**
+ * YouTube-style control bar (plan §15.4 Step 1.11): scrubber on top; play, audio, time and view
+ * controls below. Playback controls route through the role-aware PlaybackCommand; audio and view
+ * controls are this viewer's own and work for every role.
+ */
+export function ControlBar({
+  command,
+  duration,
+  audio,
+  immersive,
+  onShowShortcuts,
+  variant,
+}: ControlBarProps): ReactElement {
   const playState = useRoom((s) => s.playback?.playState ?? 'idle');
   const position = usePlaybackPosition();
   const [scrubbing, setScrubbing] = useState<number | null>(null);
+  const [hover, setHover] = useState<{ readonly fraction: number; readonly time: number } | null>(null);
   const { mode, send } = command;
   const hasVideo = playState !== 'idle';
   const playing = playState === 'playing';
   const disabled = !hasVideo || mode === 'none';
   const shown = scrubbing ?? position;
   const verb = playing ? 'Pause' : 'Play';
+  const overlay = variant === 'overlay';
+  const iconButton = cn(overlay && 'text-white hover:bg-white/15 hover:text-white');
+
+  const onScrubberPointerMove = (event: PointerEvent<HTMLDivElement>): void => {
+    if (event.pointerType !== 'mouse' || duration === null || duration <= 0) {
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (rect.width <= 0) {
+      return;
+    }
+    const fraction = Math.min(Math.max((event.clientX - rect.left) / rect.width, 0), 1);
+    setHover({ fraction, time: fraction * duration });
+  };
 
   return (
-    <div className="bg-card flex items-center gap-3 rounded-xl border px-3 pt-6 pb-2">
-      <ControlHint hint={hintFor(mode, verb, `Ask to ${verb.toLowerCase()}`)}>
-        <Button
-          size="icon"
-          variant={mode === 'request' ? 'secondary' : 'default'}
-          disabled={disabled}
-          aria-label={mode === 'request' ? `Ask to ${verb.toLowerCase()}` : verb}
-          onClick={() => void send({ type: playing ? 'pause' : 'play' })}
-        >
-          {mode === 'request' ? <Hand /> : playing ? <Pause /> : <Play />}
-        </Button>
-      </ControlHint>
-      <span className="text-muted-foreground w-28 shrink-0 text-center text-xs tabular-nums" aria-live="off">
-        {formatDuration(shown)} / {duration === null ? '–:––' : formatDuration(duration)}
-      </span>
-      <div className="relative flex-1">
+    <div
+      data-testid="control-bar"
+      data-variant={variant}
+      className={cn(
+        'grid gap-1 px-3 pt-6 pb-2',
+        overlay
+          ? 'absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent text-white'
+          : 'bg-card rounded-xl border',
+      )}
+    >
+      <div
+        className="relative"
+        data-testid="scrubber"
+        onPointerMove={onScrubberPointerMove}
+        onPointerLeave={() => {
+          setHover(null);
+        }}
+      >
         <ReactionMarkers duration={duration} />
+        {hover !== null && (
+          <span
+            aria-hidden
+            data-testid="scrubber-hover-time"
+            className="bg-foreground text-background pointer-events-none absolute bottom-full mb-6 -translate-x-1/2 rounded-md px-2 py-1 text-xs tabular-nums"
+            style={{ left: `${String(hover.fraction * 100)}%` }}
+          >
+            {formatDuration(hover.time)}
+          </span>
+        )}
         <Slider
           aria-label={mode === 'request' ? 'Ask to jump to a time' : 'Seek'}
           min={0}
@@ -68,6 +128,87 @@ export function ControlBar({ command, duration }: ControlBarProps): ReactElement
             }
           }}
         />
+      </div>
+
+      <div className="flex min-w-0 items-center gap-1">
+        <ControlHint hint={hintFor(mode, verb, `Ask to ${verb.toLowerCase()}`)}>
+          <Button
+            size="icon"
+            variant={mode === 'request' ? 'secondary' : 'default'}
+            disabled={disabled}
+            aria-label={mode === 'request' ? `Ask to ${verb.toLowerCase()}` : verb}
+            onClick={() => void send({ type: playing ? 'pause' : 'play' })}
+          >
+            {mode === 'request' ? <Hand /> : playing ? <Pause /> : <Play />}
+          </Button>
+        </ControlHint>
+
+        <ControlHint hint={audio.muted ? 'Unmute (m)' : 'Mute (m)'}>
+          <Button
+            size="icon"
+            variant="ghost"
+            className={iconButton}
+            aria-label={audio.muted ? 'Unmute' : 'Mute'}
+            aria-pressed={audio.muted}
+            onClick={() => {
+              audio.setMuted(!audio.muted);
+            }}
+          >
+            {volumeIcon(audio.muted, audio.volume)}
+          </Button>
+        </ControlHint>
+        {/* iOS ignores page-set volume and phones have hardware buttons: no slider on touch. */}
+        <div className="hidden w-20 shrink-0 items-center sm:flex pointer-coarse:hidden" data-testid="volume">
+          <Slider
+            aria-label="Volume"
+            min={0}
+            max={100}
+            step={1}
+            value={[audio.muted ? 0 : audio.volume]}
+            valueText={(v) => `${String(v)}%`}
+            onValueChange={([value]) => {
+              if (value !== undefined) {
+                audio.setVolume(value);
+              }
+            }}
+          />
+        </div>
+
+        <span
+          className={cn(
+            'shrink-0 px-2 text-xs tabular-nums',
+            overlay ? 'text-white/80' : 'text-muted-foreground',
+          )}
+          aria-live="off"
+        >
+          {formatDuration(shown)} / {duration === null ? '–:––' : formatDuration(duration)}
+        </span>
+
+        <div className="flex-1" />
+
+        {overlay && <PendingRequestsButton />}
+        <ControlHint hint="Keyboard shortcuts (?)">
+          <Button
+            size="icon"
+            variant="ghost"
+            className={cn('hidden sm:inline-flex pointer-coarse:hidden', iconButton)}
+            aria-label="Keyboard shortcuts"
+            onClick={onShowShortcuts}
+          >
+            <Keyboard />
+          </Button>
+        </ControlHint>
+        <ControlHint hint={immersive.active ? 'Exit full screen (f)' : 'Full screen (f)'}>
+          <Button
+            size="icon"
+            variant="ghost"
+            className={iconButton}
+            aria-label={immersive.active ? 'Exit full screen' : 'Full screen'}
+            onClick={immersive.toggle}
+          >
+            {immersive.active ? <Minimize /> : <Maximize />}
+          </Button>
+        </ControlHint>
       </div>
     </div>
   );

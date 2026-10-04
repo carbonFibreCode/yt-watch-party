@@ -3,7 +3,8 @@ import type { RefObject } from 'react';
 import { useQuietRpc, useRoomStore, useServerClock } from '@/features/room/RoomContext';
 import type { VideoId } from '@watchparty/shared';
 import { DRIFT_CHECK_MS, PLAYER_READY_TIMEOUT_MS } from '@watchparty/shared';
-import type { PlayerState } from './ports';
+import { clampVolume, usePlayerPrefs } from './playerPrefs';
+import type { PlayerState, VideoPlayer } from './ports';
 import { SyncEngine } from './SyncEngine';
 import type { SyncStatus } from './SyncEngine';
 import { YouTubePlayerAdapter } from './YouTubePlayerAdapter';
@@ -17,9 +18,20 @@ export interface PlayerSync {
   readonly duration: { readonly videoId: VideoId; readonly seconds: number } | null;
   /** Last measured drift in ms (debugging aid and E2E hook). */
   readonly driftMs: number | null;
-  /** Call from a user gesture to unmute / start blocked playback. */
+  /** Call from a user gesture to start blocked playback (keeps the viewer's mute choice). */
   readonly resume: () => void;
+  /** The viewer's volume, 0–100 (remembered in this browser). */
+  readonly volume: number;
+  /** What the mute icon shows: the viewer muted, or autoplay forced a muted start. */
+  readonly muted: boolean;
+  /** User gesture only. Raising the volume above 0 also unmutes. */
+  readonly setVolume: (volume: number) => void;
+  /** User gesture only. */
+  readonly setMuted: (muted: boolean) => void;
 }
+
+/** Unmuting at volume 0 would stay silent, so it comes back at this level. */
+const UNMUTE_FROM_ZERO_VOLUME = 50;
 
 /**
  * Mounts the YouTube player inside `container` and keeps it in sync with the room (LLD SP-13):
@@ -31,6 +43,9 @@ export const usePlayerSync = (container: RefObject<HTMLDivElement | null>): Play
   const quietRpc = useQuietRpc();
   const clock = useServerClock();
   const engineRef = useRef<SyncEngine | null>(null);
+  const playerRef = useRef<VideoPlayer | null>(null);
+  const volume = usePlayerPrefs((s) => s.volume);
+  const prefMuted = usePlayerPrefs((s) => s.muted);
   const [status, setStatus] = useState<SyncStatus>('idle');
   const [playerState, setPlayerState] = useState<PlayerState>('unstarted');
   const [duration, setDuration] = useState<PlayerSync['duration']>(null);
@@ -82,6 +97,15 @@ export const usePlayerSync = (container: RefObject<HTMLDivElement | null>): Play
       },
     });
     engineRef.current = engine;
+    playerRef.current = player;
+    // Restore this viewer's audio preferences once the player can take them.
+    void player.whenReady.then(() => {
+      const prefs = usePlayerPrefs.getState();
+      player.setVolume(prefs.volume).catch(() => undefined);
+      if (prefs.muted) {
+        void engine.setMuted(true);
+      }
+    });
 
     const initial = store.getState().playback;
     if (initial !== null) {
@@ -113,12 +137,38 @@ export const usePlayerSync = (container: RefObject<HTMLDivElement | null>): Play
       player.destroy();
       host.remove();
       engineRef.current = null;
+      playerRef.current = null;
     };
   }, [container, store, quietRpc, clock]);
 
   const resume = useCallback(() => {
-    void engineRef.current?.userGesture();
+    void engineRef.current?.setMuted(usePlayerPrefs.getState().muted);
   }, []);
 
-  return { status, unavailable, playerState, duration, driftMs, resume };
+  const muted = prefMuted || status === 'muted';
+
+  const setMuted = useCallback((next: boolean) => {
+    const prefs = usePlayerPrefs.getState();
+    prefs.setMuted(next);
+    if (!next && prefs.volume === 0) {
+      prefs.setVolume(UNMUTE_FROM_ZERO_VOLUME);
+      playerRef.current?.setVolume(UNMUTE_FROM_ZERO_VOLUME).catch(() => undefined);
+    }
+    void engineRef.current?.setMuted(next);
+  }, []);
+
+  const setVolume = useCallback(
+    (next: number) => {
+      const level = clampVolume(next);
+      usePlayerPrefs.getState().setVolume(level);
+      playerRef.current?.setVolume(level).catch(() => undefined);
+      // Like YouTube: turning the volume up while muted unmutes.
+      if (level > 0 && muted) {
+        void engineRef.current?.setMuted(false);
+      }
+    },
+    [muted],
+  );
+
+  return { status, unavailable, playerState, duration, driftMs, resume, volume, muted, setVolume, setMuted };
 };
