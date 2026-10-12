@@ -14,20 +14,20 @@ export function RequestCard({ request }: { readonly request: RequestView }): Rea
   const video = action.type === 'change_video' || action.type === 'queue_add' ? action.video : null;
 
   return (
-    <li className="bg-muted/40 grid gap-3 rounded-lg border p-3" data-testid="request-card">
+    <li className="bg-card border-foreground grid gap-3 border-2 p-3" data-testid="request-card">
       <div className="flex gap-3">
         {video !== null && (
           <img
             src={video.thumbnailUrl}
             alt=""
-            className="bg-muted aspect-video h-10 shrink-0 rounded object-cover"
+            className="bg-muted border-foreground aspect-video h-10 shrink-0 border object-cover"
           />
         )}
         <div className="min-w-0 flex-1 text-sm">
           <p>
-            <span className="font-medium">{request.requester.name}</span> wants to {describeAction(action)}
+            <span className="font-bold">{request.requester.name}</span> wants to {describeAction(action)}
           </p>
-          <p className="text-muted-foreground text-xs" aria-live="off">
+          <p className="neo-eyebrow text-muted-foreground mt-1" aria-live="off">
             Expires in {secondsLeft}s
           </p>
         </div>

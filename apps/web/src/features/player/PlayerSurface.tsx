@@ -80,7 +80,7 @@ export function PlayerSurface({
     <div
       className={cn(
         'relative w-full overflow-hidden bg-black',
-        immersive ? 'min-h-0 flex-1' : 'aspect-video rounded-xl',
+        immersive ? 'min-h-0 flex-1' : 'border-foreground aspect-video border-2',
       )}
       data-testid="player"
       data-sync-status={sync.unavailable ? 'unavailable' : status}
@@ -108,7 +108,7 @@ export function PlayerSurface({
             setFeedback((current) => (current?.id === feedback.id ? null : current));
           }}
           className={cn(
-            'pointer-events-none absolute top-1/2 -translate-y-1/2 rounded-full bg-black/60 px-4 py-2 text-sm font-medium text-white',
+            'bg-primary text-primary-foreground pointer-events-none absolute top-1/2 -translate-y-1/2 px-3 py-2 font-mono text-sm font-bold',
             feedback.side === 'left' ? 'left-[12%]' : 'right-[12%]',
           )}
         >
@@ -118,10 +118,10 @@ export function PlayerSurface({
       <ReactionOverlay />
 
       {!hasVideo && (
-        <div className="bg-muted/40 absolute inset-0 grid place-items-center">
+        <div className="bg-background absolute inset-0 grid place-items-center">
           <div className="grid justify-items-center gap-2 px-6 text-center">
             <Film className="text-muted-foreground size-10" />
-            <p className="font-medium">Nothing playing yet</p>
+            <p className="font-display text-3xl font-semibold italic">Nothing playing yet</p>
             <p className="text-muted-foreground text-sm">
               {canControl
                 ? 'Paste a YouTube link below to start the party.'
@@ -134,7 +134,7 @@ export function PlayerSurface({
       {hasVideo && (status === 'loading' || status === 'buffering') && (
         <div
           role="status"
-          className="absolute top-3 left-3 flex items-center gap-2 rounded-full bg-black/70 px-3 py-1 text-xs text-white"
+          className="neo-eyebrow absolute top-3 left-3 flex items-center gap-2 bg-black px-2 py-1 text-white"
         >
           <Loader2 className="size-3.5 animate-spin" />
           {status === 'loading' ? 'Syncing…' : 'Buffering…'}
@@ -144,7 +144,7 @@ export function PlayerSurface({
       {hasVideo && sync.rateUnsupported && (
         <div
           role="status"
-          className="absolute top-3 right-3 flex items-center gap-2 rounded-full bg-black/70 px-3 py-1 text-xs text-white"
+          className="neo-eyebrow absolute top-3 right-3 flex items-center gap-2 bg-black px-2 py-1 text-white"
         >
           <Gauge className="size-3.5" />
           This video can't play at {formatRate(roomRate)} on your device
@@ -156,7 +156,7 @@ export function PlayerSurface({
           size="sm"
           variant="secondary"
           // In fullscreen the control bar covers the bottom edge, so it moves to the top.
-          className={cn('absolute left-3 shadow-lg', immersive ? 'top-12' : 'bottom-3')}
+          className={cn('absolute left-3', immersive ? 'top-12' : 'bottom-3')}
           onClick={sync.resume}
         >
           <VolumeX /> Tap to unmute
@@ -167,10 +167,10 @@ export function PlayerSurface({
         <button
           type="button"
           onClick={sync.resume}
-          className="absolute inset-0 grid place-items-center bg-black/60 text-white"
+          className="absolute inset-0 grid place-items-center bg-black/75 text-white"
         >
           <span className="grid justify-items-center gap-3">
-            <span className="bg-primary text-primary-foreground grid size-16 place-items-center rounded-full">
+            <span className="bg-primary text-primary-foreground grid size-16 place-items-center">
               <Play className="size-8" />
             </span>
             <span className="font-medium">Click to join playback</span>

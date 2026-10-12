@@ -102,7 +102,9 @@ export function ControlBar({
       data-variant={variant}
       className={cn(
         'grid gap-1 px-3 pt-6 pb-2',
-        overlay ? 'bg-gradient-to-t from-black/80 to-transparent text-white' : 'bg-card rounded-xl border',
+        overlay
+          ? 'bg-black/80 text-white'
+          : 'neo-elevated neo-depth-6 neo-edge-card bg-card border-foreground border-2',
       )}
     >
       <div
@@ -118,7 +120,7 @@ export function ControlBar({
           <span
             aria-hidden
             data-testid="scrubber-hover-time"
-            className="bg-foreground text-background pointer-events-none absolute bottom-full mb-6 -translate-x-1/2 rounded-md px-2 py-1 text-xs tabular-nums"
+            className="bg-foreground text-background pointer-events-none absolute bottom-full mb-6 -translate-x-1/2 px-1.5 py-0.5 font-mono text-xs font-bold"
             style={{ left: `${String(hover.fraction * 100)}%` }}
           >
             {formatDuration(hover.time)}
@@ -193,7 +195,7 @@ export function ControlBar({
 
         <span
           className={cn(
-            'shrink-0 px-2 text-xs tabular-nums',
+            'shrink-0 px-2 font-mono text-xs',
             overlay ? 'text-white/80' : 'text-muted-foreground',
           )}
           aria-live="off"

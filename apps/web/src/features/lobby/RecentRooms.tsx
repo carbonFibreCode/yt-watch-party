@@ -24,24 +24,24 @@ export function RecentRooms(): ReactElement | null {
   }
   return (
     <section aria-labelledby="recent-rooms" className="grid gap-3">
-      <h2 id="recent-rooms" className="text-muted-foreground text-sm font-medium">
+      <h2 id="recent-rooms" className="neo-eyebrow text-muted-foreground font-sans">
         Recent rooms
       </h2>
-      <ul className="divide-border bg-card divide-y rounded-xl border">
+      <ul className="bg-card divide-foreground border-foreground divide-y-2 border-2">
         {rooms.map((room) => (
           <li key={room.roomId}>
             <Link
               to={`/r/${room.roomId}`}
-              className="hover:bg-accent/50 focus-visible:bg-accent/50 flex items-center gap-3 px-4 py-3 outline-none first:rounded-t-xl last:rounded-b-xl"
+              className="hover:bg-primary hover:text-primary-foreground focus-visible:bg-primary focus-visible:text-primary-foreground group flex items-center gap-3 px-4 py-3 outline-none"
             >
               <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">{room.name}</p>
-                <p className="text-muted-foreground text-xs">
+                <p className="truncate font-bold">{room.name}</p>
+                <p className="text-muted-foreground group-hover:text-primary-foreground group-focus-visible:text-primary-foreground text-xs">
                   <span className="font-mono">{room.roomId}</span> · {timeAgo(room.lastJoinedAt, now)}
                 </p>
               </div>
               <Badge variant="secondary">{roleLabel(room.lastRole)}</Badge>
-              <ChevronRight className="text-muted-foreground size-4" />
+              <ChevronRight className="size-4" />
             </Link>
           </li>
         ))}

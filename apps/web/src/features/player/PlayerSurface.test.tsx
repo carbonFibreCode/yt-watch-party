@@ -36,7 +36,7 @@ describe('PlayerSurface', () => {
     renderSurface('in_sync', false);
     const player = screen.getByTestId('player');
     expect(player.className).toContain('aspect-video');
-    expect(player.className).toContain('rounded-xl');
+    expect(player.className).toContain('border-2');
     expect(player.className).not.toContain('flex-1');
   });
 

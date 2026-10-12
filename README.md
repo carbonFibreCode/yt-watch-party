@@ -48,6 +48,8 @@ approve them. Every action reaches the whole room in real time over WebSockets.
   controls that fade out in fullscreen while the video plays.
 - **Synced playback speed** (0.25×–2×): the host or a moderator sets it for everyone (`<` / `>`),
   participants can ask for it, and it carries over to the next video and to late joiners.
+- **NeoPOP design:** CRED's NeoPOP design language throughout (sharp corners, flat saturated colour,
+  solid 3D edges that press in, a serif display face), enforced by an e2e design check.
 - **Accessible:** keyboard-operable, WCAG 2.1 AA audited in both themes, with a light and a dark
   theme.
 

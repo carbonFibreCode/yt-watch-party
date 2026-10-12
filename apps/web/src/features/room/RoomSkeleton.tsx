@@ -8,7 +8,7 @@ export function RoomSkeleton(): ReactElement {
     <div className="flex min-h-dvh flex-col" aria-busy="true" aria-label="Loading room">
       <AppHeader />
       <main className="mx-auto grid w-full max-w-[1600px] flex-1 gap-4 p-4 lg:grid-cols-[1fr_360px]">
-        <Skeleton className="aspect-video w-full rounded-xl" />
+        <Skeleton className="aspect-video w-full" />
         <div className="grid content-start gap-3">
           <Skeleton className="h-10 w-full" />
           <Skeleton className="h-14 w-full" />

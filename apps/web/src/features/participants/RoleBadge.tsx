@@ -13,7 +13,10 @@ const ICONS: Partial<Record<Role, ReactElement>> = {
 /** Role with an icon, so role is never conveyed by color alone. */
 export function RoleBadge({ role }: { readonly role: Role }): ReactElement {
   return (
-    <Badge variant={role === 'host' ? 'default' : 'secondary'} className="gap-1">
+    <Badge
+      variant={role === 'host' ? 'default' : role === 'moderator' ? 'info' : 'secondary'}
+      className="gap-1"
+    >
       {ICONS[role]}
       {roleLabel(role)}
     </Badge>

@@ -141,11 +141,11 @@ export function PlayerColumn(): ReactElement {
           <img
             src={video.thumbnailUrl}
             alt=""
-            className="bg-muted aspect-video h-9 shrink-0 rounded object-cover"
+            className="bg-muted border-foreground aspect-video h-9 shrink-0 border object-cover"
           />
           <div className="min-w-0 flex-1">
-            <p className="text-muted-foreground text-xs">Now playing</p>
-            <p className="truncate text-sm font-medium" title={video.title}>
+            <p className="neo-eyebrow text-muted-foreground">Now playing</p>
+            <p className="font-display truncate text-lg leading-tight font-semibold" title={video.title}>
               {video.title}
             </p>
           </div>

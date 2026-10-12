@@ -34,17 +34,18 @@ export function GuestJoinCard({ preview }: { readonly preview: RoomPreview }): R
     <div className="flex min-h-dvh flex-col">
       <AppHeader />
       <main className="grid flex-1 place-items-center px-4 py-10">
-        <Card className="w-full max-w-md gap-0 overflow-hidden pt-0">
+        <Card className="w-full max-w-md gap-0 pt-0">
           {preview.video !== null && (
             <img
               src={preview.video.thumbnailUrl}
               alt=""
-              className="bg-muted aspect-video w-full object-cover"
+              className="bg-muted border-foreground aspect-video w-full border-b object-cover"
             />
           )}
           <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-6 pt-6">
             <CardHeader>
-              <CardTitle className="text-xl">{preview.name}</CardTitle>
+              <p className="neo-eyebrow text-muted-foreground">You're invited</p>
+              <CardTitle className="text-3xl">{preview.name}</CardTitle>
               <CardDescription className="flex items-center gap-2">
                 <Users className="size-4" />
                 {preview.hostName === null ? 'Nobody here yet' : `Hosted by ${preview.hostName}`} ·{' '}
@@ -60,7 +61,7 @@ export function GuestJoinCard({ preview }: { readonly preview: RoomPreview }): R
               )}
             </CardContent>
             <CardFooter>
-              <Button type="submit" className="w-full" disabled={pending}>
+              <Button type="submit" size="lg" className="w-full" disabled={pending}>
                 {pending && <Loader2 className="animate-spin" />}
                 Join the party
               </Button>

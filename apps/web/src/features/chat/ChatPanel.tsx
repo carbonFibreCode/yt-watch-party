@@ -23,17 +23,20 @@ function ChatLine({
   readonly selfId: string | null;
 }): ReactElement {
   if (entry.kind === 'system') {
-    return <li className="text-muted-foreground py-1 text-center text-xs">{entry.text}</li>;
+    return <li className="neo-eyebrow text-muted-foreground py-1.5 text-center">{entry.text}</li>;
   }
   const own = entry.user.userId === selfId;
   return (
-    <li className={cn('rounded-lg px-2 py-1.5', own && 'bg-primary/10')}>
+    <li className={cn('border-l-4 py-1.5 pl-2.5', own ? 'border-primary' : 'border-transparent')}>
       <p className="flex items-baseline gap-2 text-xs">
-        <span className="font-semibold">{own ? 'You' : entry.user.name}</span>
+        <span className="font-bold">{own ? 'You' : entry.user.name}</span>
         {entry.user.role !== 'participant' && (
-          <span className="text-muted-foreground">{roleLabel(entry.user.role)}</span>
+          <span className="neo-eyebrow text-muted-foreground">{roleLabel(entry.user.role)}</span>
         )}
-        <time className="text-muted-foreground ml-auto" dateTime={new Date(entry.createdAt).toISOString()}>
+        <time
+          className="text-muted-foreground ml-auto font-mono"
+          dateTime={new Date(entry.createdAt).toISOString()}
+        >
           {timeFormat.format(entry.createdAt)}
         </time>
       </p>
@@ -90,7 +93,10 @@ export function ChatPanel(): ReactElement {
         }}
       >
         {chat.length === 0 ? (
-          <li className="text-muted-foreground py-10 text-center text-sm">No messages yet. Say hi!</li>
+          <li className="text-muted-foreground py-10 text-center">
+            <span className="font-display block text-2xl italic">Quiet in here.</span>
+            <span className="text-sm">Say hi!</span>
+          </li>
         ) : (
           chat.map((entry) => <ChatLine key={entry.id} entry={entry} selfId={selfId} />)
         )}

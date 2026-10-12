@@ -36,13 +36,13 @@ export function RoomHeader(): ReactElement {
 
   return (
     <AppHeader>
-      <h1 className="min-w-0 truncate font-semibold">{name}</h1>
+      <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight">{name}</h1>
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
             variant="outline"
             size="sm"
-            className="font-mono tracking-widest"
+            className="font-mono text-sm tracking-[0.2em]"
             onClick={() => void copyLink()}
           >
             {roomId}

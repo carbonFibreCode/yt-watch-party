@@ -65,15 +65,15 @@ function QueueRow({
   readonly manage: { readonly playNow: () => void; readonly remove: () => void } | null;
 }): ReactElement {
   return (
-    <li className="flex items-center gap-2 rounded-lg p-1.5">
-      <span className="text-muted-foreground w-4 shrink-0 text-right text-xs tabular-nums">{index + 1}</span>
+    <li className="flex items-center gap-2 py-1.5">
+      <span className="text-muted-foreground w-5 shrink-0 text-right font-mono text-xs">{index + 1}</span>
       <img
         src={item.video.thumbnailUrl}
         alt=""
-        className="bg-muted aspect-video h-9 shrink-0 rounded object-cover"
+        className="bg-muted border-foreground aspect-video h-9 shrink-0 border object-cover"
       />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium" title={item.video.title}>
+        <p className="truncate text-sm font-bold" title={item.video.title}>
           {item.video.title}
         </p>
         <p className="text-muted-foreground truncate text-xs">Added by {item.addedBy.name}</p>

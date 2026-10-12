@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { initials } from '@/lib/format';
+import { popColorFor } from '@/lib/popColor';
 import { cn } from '@/lib/utils';
 import type { ParticipantView } from '@watchparty/shared';
 import type { MemberAction } from './memberActions';
@@ -16,10 +17,12 @@ interface ParticipantRowProps {
 export function ParticipantRow({ participant: p, isSelf, actions }: ParticipantRowProps): ReactElement {
   const away = p.presence === 'away';
   return (
-    <li className="flex items-center gap-3 rounded-lg px-2 py-1.5" data-testid={`participant-${p.name}`}>
+    <li className="flex items-center gap-3 py-2" data-testid={`participant-${p.name}`}>
       <div className="relative">
         <Avatar className={cn('size-8', away && 'opacity-50')}>
-          <AvatarFallback className="text-xs">{initials(p.name)}</AvatarFallback>
+          <AvatarFallback className={cn('text-pop-ink text-xs', popColorFor(p.name))}>
+            {initials(p.name)}
+          </AvatarFallback>
         </Avatar>
         <span
           className={cn(
@@ -27,10 +30,12 @@ export function ParticipantRow({ participant: p, isSelf, actions }: ParticipantR
             away ? 'bg-muted-foreground' : 'bg-success',
           )}
           aria-hidden
+          // The one round element NeoPOP allows here: a status dot (checked by e2e/design.spec.ts).
+          data-neo-round
         />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">
+        <p className="truncate text-sm font-bold">
           {p.name}
           {isSelf && <span className="text-muted-foreground font-normal"> (you)</span>}
         </p>

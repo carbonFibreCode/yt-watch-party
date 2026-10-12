@@ -27,6 +27,7 @@ export function JoinRoomForm(): ReactElement {
     <Card>
       <form onSubmit={submit} className="flex h-full flex-col gap-6">
         <CardHeader>
+          <p className="neo-eyebrow text-muted-foreground">Guest</p>
           <CardTitle>Join a party</CardTitle>
           <CardDescription>Got a code or an invite link? Jump in.</CardDescription>
         </CardHeader>
@@ -40,7 +41,7 @@ export function JoinRoomForm(): ReactElement {
               setError(null);
             }}
             placeholder="K7M2QX"
-            className="font-mono tracking-widest uppercase placeholder:tracking-widest"
+            className="h-12 font-mono text-lg tracking-[0.3em] uppercase placeholder:tracking-[0.3em]"
             autoComplete="off"
             aria-invalid={error !== null}
             required
@@ -52,7 +53,7 @@ export function JoinRoomForm(): ReactElement {
           )}
         </CardContent>
         <CardFooter>
-          <Button type="submit" variant="secondary" className="w-full">
+          <Button type="submit" variant="secondary" size="lg" className="w-full">
             Join room
           </Button>
         </CardFooter>

@@ -39,12 +39,14 @@ export function PendingRequestsButton({ className }: { readonly className?: stri
         </Button>
       </ControlHint>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[85dvh] overflow-y-auto">
+        <DialogContent className="max-h-[85dvh] grid-rows-[auto_minmax(0,1fr)]">
           <DialogHeader>
             <DialogTitle>Pending requests</DialogTitle>
             <DialogDescription>Approve or reject without leaving full screen.</DialogDescription>
           </DialogHeader>
-          <RequestsPanel />
+          <div className="min-h-0 overflow-y-auto pr-1.5 pb-1.5">
+            <RequestsPanel />
+          </div>
         </DialogContent>
       </Dialog>
     </>

@@ -57,7 +57,7 @@ export function ReactionOverlay(): ReactElement {
         {floating.map(({ reaction, x }) => (
           <motion.span
             key={reaction.id}
-            className="absolute bottom-4 text-3xl drop-shadow-lg"
+            className="absolute bottom-4 text-3xl"
             style={{ left: `${String(x)}%` }}
             initial={{ opacity: 0, y: 0, scale: 0.6 }}
             animate={{ opacity: [0, 1, 1, 0], y: RISE_PX, scale: 1 }}

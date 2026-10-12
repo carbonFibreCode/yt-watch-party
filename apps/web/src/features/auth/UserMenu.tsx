@@ -13,7 +13,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { authClient } from '@/lib/authClient';
 import { initials } from '@/lib/format';
+import { popColorFor } from '@/lib/popColor';
 import { useTheme } from '@/lib/themeContext';
+import { cn } from '@/lib/utils';
 import { AuthDialog } from './AuthDialog';
 import type { AuthMode } from './AuthDialog';
 import { NameDialog } from './NameDialog';
@@ -61,9 +63,11 @@ export function UserMenu(): ReactElement | null {
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="gap-2 px-2" aria-label="Account menu">
             <Avatar className="size-7">
-              <AvatarFallback className="text-xs">{initials(name)}</AvatarFallback>
+              <AvatarFallback className={cn('text-pop-ink text-xs', popColorFor(name))}>
+                {initials(name)}
+              </AvatarFallback>
             </Avatar>
-            <span className="hidden max-w-32 truncate sm:inline">{name}</span>
+            <span className="hidden max-w-32 truncate normal-case sm:inline">{name}</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">

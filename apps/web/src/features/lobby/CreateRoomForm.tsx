@@ -59,6 +59,7 @@ export function CreateRoomForm(): ReactElement {
     <Card>
       <form onSubmit={(e) => void submit(e)} className="flex h-full flex-col gap-6">
         <CardHeader>
+          <p className="neo-eyebrow text-muted-foreground">Host</p>
           <CardTitle>Start a watch party</CardTitle>
           <CardDescription>You'll be the host. Share the link and watch together.</CardDescription>
         </CardHeader>
@@ -66,7 +67,7 @@ export function CreateRoomForm(): ReactElement {
           {needsName && <NameField id="create-name" value={name} onChange={setName} />}
           <div className="grid gap-2">
             <Label htmlFor="create-room-name">
-              Room name <span className="text-muted-foreground font-normal">(optional)</span>
+              Room name <span className="font-medium normal-case tracking-normal">(optional)</span>
             </Label>
             <Input
               id="create-room-name"
@@ -80,7 +81,7 @@ export function CreateRoomForm(): ReactElement {
           </div>
           <div className="grid gap-2">
             <Label htmlFor="create-video">
-              First video <span className="text-muted-foreground font-normal">(optional)</span>
+              First video <span className="font-medium normal-case tracking-normal">(optional)</span>
             </Label>
             <Input
               id="create-video"
@@ -94,7 +95,7 @@ export function CreateRoomForm(): ReactElement {
             />
             <p id="create-video-hint" className="text-muted-foreground min-h-5 text-xs" aria-live="polite">
               {detectedVideo !== null && (
-                <span className="text-success inline-flex items-center gap-1">
+                <span className="text-success inline-flex items-center gap-1 font-semibold">
                   <CircleCheck className="size-3.5" /> YouTube video detected
                 </span>
               )}
@@ -110,7 +111,7 @@ export function CreateRoomForm(): ReactElement {
           )}
         </CardContent>
         <CardFooter>
-          <Button type="submit" className="w-full" disabled={pending}>
+          <Button type="submit" size="lg" className="neo-shimmer w-full" disabled={pending}>
             {pending && <Loader2 className="animate-spin" />}
             Create room
           </Button>

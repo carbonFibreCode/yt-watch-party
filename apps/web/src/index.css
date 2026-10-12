@@ -1,61 +1,110 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
-@import '@fontsource-variable/inter';
+@import '@fontsource-variable/fraunces';
+@import '@fontsource-variable/manrope';
+@import '@fontsource-variable/jetbrains-mono';
 
 @custom-variant dark (&:is(.dark *));
 
-/* Design tokens (shadcn/ui variables). Dark is the default theme; `.light` on <html> opts out. */
+/*
+ * NeoPOP design tokens (plan §16.2). Sharp corners, flat saturated colour, depth only from solid
+ * 3D edges (see `neo-elevated` below). Dark is the default theme; `:root` holds the light values.
+ */
 :root {
-  --radius: 0.75rem;
-  --background: oklch(0.985 0.002 286);
-  --foreground: oklch(0.21 0.02 286);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.21 0.02 286);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.21 0.02 286);
-  --primary: oklch(0.55 0.22 285);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.95 0.01 286);
-  --secondary-foreground: oklch(0.25 0.02 286);
-  --muted: oklch(0.95 0.01 286);
-  --muted-foreground: oklch(0.5 0.02 286);
-  --accent: oklch(0.94 0.03 285);
-  --accent-foreground: oklch(0.3 0.08 285);
-  --destructive: oklch(0.58 0.22 27);
-  --border: oklch(0.9 0.01 286);
-  --input: oklch(0.9 0.01 286);
-  --ring: oklch(0.55 0.22 285);
-  --success: oklch(0.62 0.16 155);
+  --radius: 0rem;
+
+  --background: #f7f5ee;
+  --foreground: #0d0d0d;
+  --card: #ffffff;
+  --card-foreground: #0d0d0d;
+  --popover: #ffffff;
+  --popover-foreground: #0d0d0d;
+  --muted: #ece9df;
+  --muted-foreground: #55534d;
+  --accent: #ece9df;
+  --accent-foreground: #0d0d0d;
+  --border: #0d0d0d;
+  --input: #0d0d0d;
+  --ring: #2f5bff;
+
+  --primary: #ffd60a;
+  --primary-foreground: #0d0d0d;
+  --primary-edge-r: #8a7300;
+  --primary-edge-b: #c2a100;
+
+  --secondary: #0d0d0d;
+  --secondary-foreground: #fafaf7;
+  --secondary-edge-r: #5a5a5a;
+  --secondary-edge-b: #3a3a3a;
+
+  --destructive: #e5381c;
+  --destructive-foreground: #ffffff;
+  --destructive-edge-r: #8f1f0c;
+  --destructive-edge-b: #b82a13;
+
+  --card-edge-r: #0d0d0d;
+  --card-edge-b: #3a3a3a;
+
+  --success: #0e8a55;
+  --info: #2f5bff;
+  --info-foreground: #ffffff;
+
+  /* Pop palette: avatars and accents, always with ink text. */
+  --pop-yellow: #ffe14d;
+  --pop-mint: #3ddc97;
+  --pop-blue: #7fa2ff;
+  --pop-pink: #ff8cc6;
+  --pop-coral: #ff7a5c;
+  --pop-lilac: #b79cff;
+  --pop-ink: #0d0d0d;
 }
 
 .dark {
-  --background: oklch(0.16 0.015 286);
-  --foreground: oklch(0.97 0.005 286);
-  --card: oklch(0.2 0.02 286);
-  --card-foreground: oklch(0.97 0.005 286);
-  --popover: oklch(0.21 0.02 286);
-  --popover-foreground: oklch(0.97 0.005 286);
-  --primary: oklch(0.68 0.19 285);
-  --primary-foreground: oklch(0.16 0.015 286);
-  --secondary: oklch(0.26 0.02 286);
-  --secondary-foreground: oklch(0.97 0.005 286);
-  --muted: oklch(0.25 0.02 286);
-  --muted-foreground: oklch(0.7 0.02 286);
-  --accent: oklch(0.3 0.06 285);
-  --accent-foreground: oklch(0.97 0.005 286);
-  --destructive: oklch(0.65 0.2 25);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 14%);
-  --ring: oklch(0.68 0.19 285);
-  --success: oklch(0.72 0.16 155);
+  --background: #0d0d0d;
+  --foreground: #fafaf7;
+  --card: #161616;
+  --card-foreground: #fafaf7;
+  --popover: #161616;
+  --popover-foreground: #fafaf7;
+  --muted: #1f1f1f;
+  --muted-foreground: #a3a3a3;
+  --accent: #262626;
+  --accent-foreground: #fafaf7;
+  --border: #333333;
+  --input: #707070;
+  --ring: #ffe14d;
+
+  --primary: #ffe14d;
+  --primary-foreground: #0d0d0d;
+  --primary-edge-r: #a38e1f;
+  --primary-edge-b: #d1b735;
+
+  --secondary: #fafaf7;
+  --secondary-foreground: #0d0d0d;
+  --secondary-edge-r: #8a8a86;
+  --secondary-edge-b: #bdbdb8;
+
+  --destructive: #ff5a3c;
+  --destructive-foreground: #0d0d0d;
+  --destructive-edge-r: #a3301b;
+  --destructive-edge-b: #d2452b;
+
+  --card-edge-r: #4a4a4a;
+  --card-edge-b: #333333;
+
+  --success: #3ddc97;
+  --info: #7fa2ff;
+  --info-foreground: #0d0d0d;
 }
 
 @theme inline {
-  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: 'Manrope Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Fraunces Variable', ui-serif, Georgia, serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, monospace;
+  --radius-sm: 0rem;
+  --radius-md: 0rem;
+  --radius-lg: 0rem;
+  --radius-xl: 0rem;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -71,17 +120,192 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-success: var(--success);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-pop-yellow: var(--pop-yellow);
+  --color-pop-mint: var(--pop-mint);
+  --color-pop-blue: var(--pop-blue);
+  --color-pop-pink: var(--pop-pink);
+  --color-pop-coral: var(--pop-coral);
+  --color-pop-lilac: var(--pop-lilac);
+  --color-pop-ink: var(--pop-ink);
+}
+
+/*
+ * The NeoPOP 3D edge (plan §16.3): two solid faces drawn with pseudo-elements, meeting at a 45°
+ * bevel. No shadows. Set the depth with `neo-depth-*` and the colours with `neo-edge-*`.
+ */
+@utility neo-elevated {
+  position: relative;
+  --neo-depth-live: var(--neo-depth, 3px);
+
+  &::before,
+  &::after {
+    content: '';
+    position: absolute;
+    pointer-events: none;
+    transform-origin: top left;
+    transition:
+      width 80ms ease-out,
+      height 80ms ease-out;
+  }
+  /* Bottom face. */
+  &::before {
+    top: 100%;
+    left: 0;
+    width: 100%;
+    height: var(--neo-depth-live);
+    background: var(--neo-edge-bottom, var(--card-edge-b));
+    transform: skewX(45deg);
+  }
+  /* Right face. */
+  &::after {
+    top: 0;
+    left: 100%;
+    width: var(--neo-depth-live);
+    height: 100%;
+    background: var(--neo-edge-right, var(--card-edge-r));
+    transform: skewY(45deg);
+  }
+  /* Disabled controls are flat. */
+  &:disabled::before,
+  &:disabled::after,
+  &[aria-disabled='true']::before,
+  &[aria-disabled='true']::after {
+    display: none;
+  }
+}
+
+/* Pressable elevated controls sink into their edges on press. */
+@utility neo-plunk {
+  transition: transform 80ms ease-out;
+
+  &:active:not(:disabled):not([aria-disabled='true']) {
+    transform: translate(var(--neo-depth, 3px), var(--neo-depth, 3px));
+    --neo-depth-live: 0px;
+  }
+}
+
+@utility neo-depth-3 {
+  --neo-depth: 3px;
+}
+@utility neo-depth-6 {
+  --neo-depth: 6px;
+}
+@utility neo-depth-8 {
+  --neo-depth: 8px;
+}
+@utility neo-edge-primary {
+  --neo-edge-right: var(--primary-edge-r);
+  --neo-edge-bottom: var(--primary-edge-b);
+}
+@utility neo-edge-secondary {
+  --neo-edge-right: var(--secondary-edge-r);
+  --neo-edge-bottom: var(--secondary-edge-b);
+}
+@utility neo-edge-destructive {
+  --neo-edge-right: var(--destructive-edge-r);
+  --neo-edge-bottom: var(--destructive-edge-b);
+}
+@utility neo-edge-card {
+  --neo-edge-right: var(--card-edge-r);
+  --neo-edge-bottom: var(--card-edge-b);
+}
+
+/* NeoPOP's shimmering CTA: a light sweep across the face, off for reduced motion. */
+@utility neo-shimmer {
+  background-image: linear-gradient(105deg, transparent 40%, rgb(255 255 255 / 0.6) 50%, transparent 60%);
+  background-size: 250% 100%;
+  background-repeat: no-repeat;
+  animation: neo-shimmer 3s ease-in-out infinite;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+    background-image: none;
+  }
+}
+
+@keyframes neo-shimmer {
+  0% {
+    background-position: 130% 0;
+  }
+  60%,
+  100% {
+    background-position: -30% 0;
+  }
+}
+
+/* The NeoPOP "eyebrow": small uppercase letter-spaced label. */
+@utility neo-eyebrow {
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
+  }
+  html {
+    @apply font-sans;
   }
   body {
     @apply bg-background text-foreground antialiased;
   }
+  h1,
+  h2,
+  h3 {
+    @apply font-display;
+    font-optical-sizing: auto;
+  }
+  ::selection {
+    background: var(--primary);
+    color: var(--primary-foreground);
+  }
+  /* One focus style everywhere: a solid outline, never a glow. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0ms !important;
+      animation-duration: 0ms !important;
+    }
+  }
+}
+
+/* Sonner toasts, NeoPOP style (the library renders its own markup). */
+[data-sonner-toaster] [data-sonner-toast] {
+  border-radius: 0 !important;
+  border-width: 2px !important;
+  box-shadow: none !important;
+  font-family: var(--font-sans);
+}
+[data-sonner-toaster] [data-sonner-toast] [data-button] {
+  border-radius: 0 !important;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.6875rem;
+  height: 1.75rem;
+  padding: 0 0.625rem;
+}
+[data-sonner-toaster] [data-sonner-toast] [data-button][data-action] {
+  background: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+}
+[data-sonner-toaster] [data-sonner-toast] [data-button][data-cancel] {
+  background: transparent !important;
+  color: var(--foreground) !important;
+  border: 2px solid var(--foreground) !important;
 }

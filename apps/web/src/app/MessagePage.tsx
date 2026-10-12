@@ -17,10 +17,8 @@ export function MessagePage({ icon, title, description, action }: MessagePagePro
       <AppHeader />
       <main className="grid flex-1 place-items-center px-4">
         <div className="grid max-w-md justify-items-center gap-4 text-center">
-          <div className="bg-muted text-muted-foreground grid size-14 place-items-center rounded-full">
-            {icon}
-          </div>
-          <h1 className="text-2xl font-semibold">{title}</h1>
+          <div className="bg-primary text-primary-foreground grid size-16 place-items-center">{icon}</div>
+          <h1 className="text-4xl font-semibold tracking-tight">{title}</h1>
           <p className="text-muted-foreground">{description}</p>
           {action ?? (
             <Button asChild>
